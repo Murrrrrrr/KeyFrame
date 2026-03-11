@@ -1,0 +1,59 @@
+# Python bytecode file
+*.pyc
+*.pyo
+__pycache__/
+
+# Virtual environment
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Distribution / packaging
+.Python
+bulid/
+dist/
+*.egg-info/
+*.manifest
+*.spec
+
+# Cython debug symbols
+cython_debug/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# PyCharm specific
+.idea/
+
+# VSCode specific
+.vscode/
+
+# log files
+*.log
+
+# Data files
+data/raw/
+data/processed/
+data/splits/
+AthletePose3D/
+
+# Configuration files
+configs/*
+
+# Model checkpoints
+models/checkpoints/
+models/*.pt
+models/*.onnx
+
+# Hardware related files
+hardware/*.mp4
+hardware/*.npy
+
+# Generated files
+*.out
+*.bak
+*.swp
+*.swo

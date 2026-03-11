@@ -1,0 +1,44 @@
+experiment_name: "Running_Gait_Analsy"
+
+# 数据集配置
+data:
+  dataset_root: "AthletePose3D/data"
+  splits:
+    train:
+      - "train_set/S3"
+      - "train_set/S4"
+    valid:
+      - "valid_set/S2"
+    test:
+      - "test_set/S2"
+
+  # 降维读取策略（屏蔽视频和相机参数）
+  target_file: "h36m.npy"
+  ignore_file: [".mp4", "cam.json"]
+
+  # 骨架解析参数
+  fps: 120
+  use_normalization: true # 是否开启骨盆原点对齐与动态尺度归一化
+  extract_m_zeni: true  # 是否计算 M-Zeni 物理特征
+
+# 网络架构配置
+model:
+  backbone: "CfC" # 闭式连续时间神经网络单元
+
+  input_dim: 61 # 30维空间 + 1维 M-Zeni + 30维速度 = 61维
+  hidden_size: 64 # 隐藏层与投影：映射至更高表达能力的隐藏语义空间
+  num_layers: 2
+  output_dim: 1 #任务解码头：回归为一维的任务输出（触地/离地 logits）
+
+training:
+  batch_size: 32
+  seq_len: 64 # 动力学核心推演的时间滑窗长度
+  learning_rate: 0.001
+  epochs: 30
+
+  loss:
+    bce_weight: 1.0 #基础二元交叉熵分类损失
+    physics_penalty_weight: 0.5 # 基于 M-Zeni 的物理常识惩罚权重
+
+evaluation:
+  tolerance_windows: 3 # 正负三帧的容差窗口大小 W=3
