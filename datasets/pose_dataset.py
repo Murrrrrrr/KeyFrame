@@ -1,0 +1,128 @@
+import os
+import numpy as np
+import torch
+import json
+from torch.utils.data import Dataset
+
+class PoseSequenceDataset(Dataset):
+    """
+    设计专门对于 LNN 的时序姿态数据集
+    支持长视频滑窗切割、多模态特征融合以及时间间隔特征的提取
+    """
+    def __init__(self,data_dir, label_dir, split_file, split_mode='train', seq_len=64, stride=16, base_fps=50, simulate_jitter=False):
+        """
+        :param data_dir: 处理后的61维特征数据 （.npy）
+        :param label_dir: 处理后的 one-hot 标签目录
+        :param seq_len: 滑动窗口的时序长度（默认为64帧）
+        :param stride:  滑动步长，计算 Overlap (seq_len - stride)
+        :param base_fps: 原始采集帧率，用于计算基准 dt
+        :param simulate_jitter: 硬件仿真标志位。设为 True 时模拟边缘设备的丢帧和时钟抖动
+        """
+        self.data_dir = data_dir
+        self.label_dir = label_dir
+        self.split_file = split_file
+        self.split_mode = split_mode
+        self.seq_len = seq_len
+        self.stride = stride
+        self.base_dt = 1.0/base_fps
+        self.simulate_jitter = simulate_jitter
+
+        self.samples = []
+        self._build_index()
+
+    def _build_index(self):
+        """解析 JSON 并定向扫描指定目录构建滑窗索引"""
+        # 挂载并解析JSON划分配置文件
+        if not os.path.exists(self.split_file):
+            raise FileNotFoundError(f"警告： 找不到数据划分文件")
+
+        with open(self.split_file, 'r', encoding='utf-8') as f:
+            split_info = json.load(f)
+
+        if self.split_mode not in split_info['splits']:
+            raise ValueError(f"[配置错误] 未知的划分模式'{self.split_mode}'。请检查 JSON 文件。")
+
+        allowed_subdirs = split_info['splits'][self.split_mode]
+
+        # 仅在允许的受试者/环境子目录中进行检索
+        for subdir in allowed_subdirs:
+            target_data_dir = os.path.join(self.data_dir, subdir)
+
+            if not os.path.exists(target_data_dir):
+                print(f"[IO警告] 配置中声明的数据子目录不存在，跳过：{target_data_dir}")
+                continue
+
+            for root, _, files in os.walk(target_data_dir):
+                for file in files:
+                    if not file.endswith('.npy'):
+                        continue
+
+                    data_path = os.path.join(root, file)
+                    # 镜像映射到标签路径，保持相对目录树一致
+                    rel_path = os.path.relpath(data_path, self.data_dir)
+                    label_path = os.path.join(self.label_dir, rel_path)
+
+                    if not os.path.exists(label_path):
+                        print(f"[数据缺失警告] 找不到对应的标签文件，跳过：{label_path}")
+                        continue
+
+                    # 内存映射读取 shape，避免资源爆炸
+                    data_shape = np.load(data_path, mmap_mode = 'r').shape
+                    total_frames = data_shape[0]
+
+                    if total_frames < self.seq_len:
+                        continue
+
+                    for start_idx in range(0, total_frames-self.seq_len, self.stride):
+                        self.samples.append({
+                            'data_path': data_path,
+                            'label_path': label_path,
+                            'start_idx': start_idx,
+                        })
+
+            print(f"[数据集准备就绪] 模式：{self.split_mode.upper()} | 共构建{len(self.samples)} 个序列窗口。")
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        sample_info = self.samples[idx]
+        start = sample_info['start_idx']
+        end = start + self.seq_len
+
+        # 提取多模态特征矩阵
+        features = np.load(sample_info['data_path'], mmap_mode='r')[start:end].copy()
+        labels = np.load(sample_info['label_path'], mmap_mode='r')[start:end].copy()
+
+        # 硬件时间戳抽象：生成 dt 数组
+        dt_array = np.full((self.seq_len, 1), self.base_dt, dtype=np.float32)
+
+        # (软硬协同模块) 开启时磨你边缘端 I2C/MIPI 接口读取传感器时的时钟抖动和总线阻塞丢帧
+        if self.simulate_jitter:
+            jitter = np.random.normal(0, self.base_dt * 1, (self.seq_len, 1))
+            dt_array += jitter
+            drop_mask = np.random.rand(self.seq_len, 1) < 0.05
+            dt_array[drop_mask] *= np.random.randiant(2, 4)
+
+        # 转换为PyTorch Tensors
+        x_tensor = torch.tensor(features, dtype=torch.float32)
+        y_tensor = torch.tensor(labels, dtype=torch.float32)
+        dt_tensor = torch.tensor(dt_array, dtype=torch.float32)
+
+        return x_tensor, y_tensor, dt_tensor
+
+    # ==========================================
+    # 测试入口点：让脚本直接运行时产生输出
+    # ==========================================
+    if __name__ == "__main__":
+        print("🚀 开始本地测试数据集类...")
+
+        # 构造假路径进行空跑测试，验证逻辑是否通顺
+        PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        dummy_data_dir = os.path.join(PROJECT_ROOT, "data", "processed_features")
+        dummy_label_dir = os.path.join(PROJECT_ROOT, "data", "processed_labels")
+        dummy_split_file = os.path.join(PROJECT_ROOT, "athlete_pose_splits.json")
+
+        print(f"预期的根目录: {PROJECT_ROOT}")
+        print("注意：如果上述路径下没有真实数据，_build_index 可能会报 FileNotFoundError。")
+        print("只要看到这句话，说明你的 Python 进程已成功进入入口点！")

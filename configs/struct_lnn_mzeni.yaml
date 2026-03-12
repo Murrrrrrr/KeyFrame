@@ -13,7 +13,7 @@ data:
       - "test_set/S2"
 
   # 降维读取策略（屏蔽视频和相机参数）
-  target_file: "h36m.npy"
+  target_file: "*_h36m.npy"
   ignore_file: [".mp4", "cam.json"]
 
   # 骨架解析参数

@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import glob
 from scipy.signal import find_peaks
 
 def normalize_signal(signal):
@@ -10,7 +11,7 @@ def normalize_signal(signal):
         return signal
     return (signal - min_val) / (max_val - min_val)
 
-def generate_labels_for_athlete_pose(dataset_root, splits):
+def generate_labels_for_athlete_pose(dataset_root, output_root, splits):
     """
     根据数据集自带的 3D骨架数据(h36m.npy)自动生成跑姿关键帧标签
     物理依据：M-Zeni规则
@@ -25,11 +26,14 @@ def generate_labels_for_athlete_pose(dataset_root, splits):
     for split_name, floders in splits.items():
         for floder in floders:
             folder_path = os.path.join(dataset_root, floder)
-            h36m_path = os.path.join(folder_path, "*_h36m.npy")
+            search_pattern = os.path.join(folder_path, "*_h36m.npy")
+            matched_files = glob.glob(search_pattern)
 
-            if not os.path.exists(h36m_path):
-                print(f" 警告：找不到{h36m_path}，跳过该目录。")
+            if not matched_files:
+                print(f" 警告：找不到{search_pattern}，跳过该目录。")
                 continue
+
+            h36m_path = matched_files[0]
 
             # shape 为（Frames, Joints, 3）
             keypoints_3d = np.load(h36m_path)
@@ -60,16 +64,19 @@ def generate_labels_for_athlete_pose(dataset_root, splits):
             # 生成对应的独热编码标签
             labels = np.zeros((num_frames, 1), dtype=np.float32)
             labels[peaks] = 1.0
-            labels_save_path = os.path.join(folder_path, "labels.npy")
+            save_dir = os.path.join(output_root, floder)
+            os.makedirs(save_dir, exist_ok=True)
+            labels_save_path = os.path.join(save_dir, "labels.npy")
             np.save(labels_save_path, labels)
 
             print(f" 处理完毕：{floder} | 提取到 M-Zeni 联合关键帧：{len(peaks)}个")
 
 if __name__ == "__main__":
-    ROOT_DIR = "AthletePose3D/data"
+    ROOT_DIR = "D:/Python项目/KeyFrame/AthletePose3D/data"
+    OUTPUT_DIR = r"D:\Python项目\KeyFrame\data\processed_labels"
     TARGET_SPLITS = {
         "train": ["train_set/S3", "train_set/S4"],
         "valid": ["valid_set/S2"],
         "test": ["test_set/S2"]
     }
-    generate_labels_for_athlete_pose(ROOT_DIR, TARGET_SPLITS)
+    generate_labels_for_athlete_pose(ROOT_DIR, OUTPUT_DIR, TARGET_SPLITS)
