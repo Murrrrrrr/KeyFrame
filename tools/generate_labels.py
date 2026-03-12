@@ -20,8 +20,12 @@ def generate_labels_for_athlete_pose(dataset_root, output_root, splits):
 
     # H36M 拓扑中，右脚尖标签点是5，左脚尖标签点是10，骨盆标签点是0
     PELVIS_IDX = 0
-    LEFT_FOOT_IDX = 10
-    RIGHT_FOOT_IDX = 5
+    LEFT_FOOT_HEEL_IDX = 9
+    RIGHT_FOOT_HEEL_IDX = 4
+    LEFT_FOOT_ANKLE_IDX = 8
+    RIGHT_FOOT_ANKLE_IDX = 3
+    LEFT_FOOT_TOE_IDX = 10
+    RIGHT_FOOT_TOE_IDX = 5
 
     for split_name, floders in splits.items():
         for floder in floders:
@@ -41,16 +45,29 @@ def generate_labels_for_athlete_pose(dataset_root, output_root, splits):
 
             # 剥离左右脚的3D空间坐标
             pelvis_coords = keypoints_3d[:, PELVIS_IDX, :]
-            left_foot_coords =  keypoints_3d[:, LEFT_FOOT_IDX, :]
-            right_foot_coords = keypoints_3d[:, RIGHT_FOOT_IDX, :]
+            left_foot_heel_coords =  keypoints_3d[:, LEFT_FOOT_HEEL_IDX, :]
+            right_foot_heel_coords = keypoints_3d[:, RIGHT_FOOT_HEEL_IDX, :]
+            left_foot_ankle_coords = keypoints_3d[:, LEFT_FOOT_ANKLE_IDX, :]
+            right_foot_ankle_coords = keypoints_3d[:, RIGHT_FOOT_ANKLE_IDX, :]
+            left_foot_toe_coords = keypoints_3d[:, LEFT_FOOT_TOE_IDX, :]
+            right_foot_toe_coords = keypoints_3d[:, RIGHT_FOOT_TOE_IDX, :]
+
+            # 根据视觉置信度调节踝关节约束的比重
+            ankle_weight = 0.5
 
             #经典Zeni算法(足部-骨盆相对位移)
-            zeni_left = np.linalg.norm(left_foot_coords - pelvis_coords, axis=1)
-            zeni_right = np.linalg.norm(right_foot_coords - pelvis_coords, axis=1)
+            zeni_left_hs = np.linalg.norm(left_foot_heel_coords - pelvis_coords, axis=1)
+            zeni_left_to = np.linalg.norm(left_foot_toe_coords - pelvis_coords, axis=1)
+            zeni_left = zeni_left_hs + zeni_left_to + ankle_weight * np.linalg.norm(left_foot_ankle_coords - pelvis_coords, axis=1)
+            zeni_right_hs = np.linalg.norm(right_foot_heel_coords - pelvis_coords, axis=1)
+            zeni_right_to = np.linalg.norm(right_foot_toe_coords - pelvis_coords, axis=1)
+            zeni_right = zeni_right_hs + zeni_right_to + ankle_weight * np.linalg.norm(right_foot_ankle_coords - pelvis_coords, axis=1)
             zeni_signal = np.maximum(zeni_left, zeni_right)
 
             # 计算 M-Zeni 物理特征（双足空间欧式距离）
-            m_zeni_signal= np.linalg.norm(left_foot_coords - right_foot_coords, axis=1)
+            m_zeni_signal= np.linalg.norm(left_foot_toe_coords - right_foot_toe_coords, axis=1) + \
+                np.linalg.norm(left_foot_heel_coords - right_foot_heel_coords, axis=1) + \
+                ankle_weight * np.linalg.norm(left_foot_ankle_coords - right_foot_ankle_coords, axis=1)
 
             # 联合约束：将两个信号归一化后进行融合
             # 本实验采用相乘来放大极值瞬间的“尖锐度”，消除单一算法的误检

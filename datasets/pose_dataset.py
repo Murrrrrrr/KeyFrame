@@ -59,8 +59,8 @@ class PoseSequenceDataset(Dataset):
 
                     data_path = os.path.join(root, file)
                     # 镜像映射到标签路径，保持相对目录树一致
-                    rel_path = os.path.relpath(data_path, self.data_dir)
-                    label_path = os.path.join(self.label_dir, rel_path)
+                    rel_dir = os.path.relpath(root, self.data_dir)
+                    label_path = os.path.join(self.label_dir, rel_dir, 'labels.npy')
 
                     if not os.path.exists(label_path):
                         print(f"[数据缺失警告] 找不到对应的标签文件，跳过：{label_path}")
@@ -110,19 +110,3 @@ class PoseSequenceDataset(Dataset):
         dt_tensor = torch.tensor(dt_array, dtype=torch.float32)
 
         return x_tensor, y_tensor, dt_tensor
-
-    # ==========================================
-    # 测试入口点：让脚本直接运行时产生输出
-    # ==========================================
-    if __name__ == "__main__":
-        print("🚀 开始本地测试数据集类...")
-
-        # 构造假路径进行空跑测试，验证逻辑是否通顺
-        PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        dummy_data_dir = os.path.join(PROJECT_ROOT, "data", "processed_features")
-        dummy_label_dir = os.path.join(PROJECT_ROOT, "data", "processed_labels")
-        dummy_split_file = os.path.join(PROJECT_ROOT, "athlete_pose_splits.json")
-
-        print(f"预期的根目录: {PROJECT_ROOT}")
-        print("注意：如果上述路径下没有真实数据，_build_index 可能会报 FileNotFoundError。")
-        print("只要看到这句话，说明你的 Python 进程已成功进入入口点！")
