@@ -5,10 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="c589d863-93df-4603-a45d-8b55be732b4f" name="更改" comment="">
-      <change afterPath="$PROJECT_DIR$/tools/evaluate.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/tools/train.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/metrics.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/metrics.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/struct_lnn.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/struct_lnn.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/generate_features.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/generate_features.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -83,6 +82,8 @@
       <workItem from="1773214956720" duration="7899000" />
       <workItem from="1773280534277" duration="9508000" />
       <workItem from="1773297904773" duration="10509000" />
+      <workItem from="1773368288833" duration="6500000" />
+      <workItem from="1773386404431" duration="1142000" />
     </task>
     <servers />
   </component>
@@ -94,7 +95,7 @@
     <SUITE FILE_PATH="coverage/KeyFrame$test_dataset.coverage" NAME="test_dataset 覆盖结果" MODIFIED="1773284342774" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/datasets" />
     <SUITE FILE_PATH="coverage/KeyFrame$generate_labels.coverage" NAME="generate_labels 覆盖结果" MODIFIED="1773301490948" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tools" />
     <SUITE FILE_PATH="coverage/KeyFrame$struct_lnn.coverage" NAME="struct_lnn 覆盖结果" MODIFIED="1773287469097" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/models" />
-    <SUITE FILE_PATH="coverage/KeyFrame$generate_features.coverage" NAME="generate_features 覆盖结果" MODIFIED="1773283904564" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tools" />
+    <SUITE FILE_PATH="coverage/KeyFrame$generate_features.coverage" NAME="generate_features 覆盖结果" MODIFIED="1773387085390" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tools" />
     <SUITE FILE_PATH="coverage/KeyFrame$pose_dataset.coverage" NAME="pose_dataset 覆盖结果" MODIFIED="1773280966152" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/datasets" />
   </component>
 </project>

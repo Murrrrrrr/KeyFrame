@@ -56,7 +56,7 @@ class StructLNN(nn.Module):
         logits = self.event_head(sequence_output)
         return logits
 
-    # 硬件连通性自检
+# 硬件连通性自检
 if __name__ == "__main__":
     print("正在验证 StructLNN 软硬件协同架构维度...")
     # 模拟从 pose_dataset.py 传过来的一个 Batch
@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     out_logits = model(dummy_x, dummy_dt)
 
-    print(f"✅ 输入 X 维度: {dummy_x.shape}")
-    print(f"✅ 输入 dt 维度: {dummy_dt.shape}")
-    print(f"✅ 最终输出 Logits 维度: {out_logits.shape} (预期: [32, 64, 1])")
+    print(f"输入 X 维度: {dummy_x.shape}")
+    print(f"输入 dt 维度: {dummy_dt.shape}")
+    print(f"最终输出 Logits 维度: {out_logits.shape} (预期: [32, 64, 1])")
     print("架构组装完美！")
