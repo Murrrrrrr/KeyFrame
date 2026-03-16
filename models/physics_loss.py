@@ -38,14 +38,18 @@ class StructLNNLoss(nn.Module):
         # 惩罚在极短窗口内出现的连续高概率激活（违背了人体运动学以及传感器物理规律）
         physics_loss = 0.0
         if self.physics_weight > 0:
-            # 使用 1D 最大池化寻找局部窗口内的峰值冲突
-            # 窗口大小为 min_step_frames，如果局部连续高激活，Max Pool 后求和会放大惩罚
+            # 使用 1D 平均池化计算局部窗口内的“概率积分”
+            # 物理含义：在min_step_frames 窗口内，所有帧的预测概率总和不应超过 1
             smoothed_probs = probs.squeeze(-1) # [Batch, 64]
+            window_sum = F.avg_pool1d(
+                smoothed_probs.unsqueeze(-1),
+                kernel_size = self.min_step_frames,
+                stride = 1,
+                padding = self.min_step_frames // 2
+            ).squeeze(1) * self.min_step_frames
 
-            prob_diff = torch.abs(smoothed_probs[:, 1:] - smoothed_probs[:, :-1])
-            tv_loss = prob_diff.mean() # Total Variation 惩罚过拟合的尖峰噪音
-
-            physics_loss = tv_loss * self.physics_weight
+            physics_penalty = F.relu(window_sum - 1.0)
+            physics_loss = physics_penalty.mean() * self.physics_weight
 
         # 总线聚合
         total_loss = focal_loss + physics_loss

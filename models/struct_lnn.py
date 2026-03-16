@@ -7,9 +7,9 @@ from models.heads.event_head import EventHead
 class StructLNN(nn.Module):
     """
     Struct-LNN 核心决策网络
-    整合 61维多模态物理先验特征，经由液态连续时间网络，输出关键帧预测
+    整合 67 维多模态物理先验特征，经由液态连续时间网络，输出关键帧预测
     """
-    def __init__(self, input_dim=61, hidden_dim=128, num_classes=1):
+    def __init__(self, input_dim=67, hidden_dim=128, num_classes=1):
         super(StructLNN, self).__init__()
         self.hidden_dim = hidden_dim
 
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     print("正在验证 StructLNN 软硬件协同架构维度...")
     # 模拟从 pose_dataset.py 传过来的一个 Batch
     dummy_x = torch.randn(32, 64, 61)  # [Batch, SeqLen, Features]
-    dummy_dt = torch.abs(torch.randn(32, 64, 1)) * 0.02  # 模拟 50FPS 左右的 dt
+    dummy_dt = torch.abs(torch.randn(32, 64, 1)) * 0.00833  # 模拟 50FPS 左右的 dt
 
     model = StructLNN(input_dim=61, hidden_dim=128, num_classes=1)
 
