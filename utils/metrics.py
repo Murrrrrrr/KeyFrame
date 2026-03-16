@@ -5,9 +5,9 @@ from typing import List, Tuple, Union, Dict
 
 class SpareseKeyframeMetrics:
     """
-    极度稀疏关键帧评估器
+    稀疏关键帧评估器
     """
-    def __init__(self, tolerance: int=3, threshold: float=0.5, min_step_frames: int=5):
+    def __init__(self, tolerance: int=3, threshold: float=0.5, min_step_frames: int=5, from_logits: bool=False):
         """
         :param tolerance: 容差匹配窗口（默认正负3帧，即 delta_t 容忍度）
         :param threshold: 激活概率的绝对阈值
@@ -16,6 +16,7 @@ class SpareseKeyframeMetrics:
         self.tolerance = tolerance
         self.threshold = threshold
         self.min_step_frames = min_step_frames
+        self.from_logits = from_logits
         self.reset()
 
     def reset(self):
@@ -32,7 +33,7 @@ class SpareseKeyframeMetrics:
         :param targets: [Batch, 64, 1] 或 [Batch, 64] 二值标签
         """
         # 统一张量维度与数值域
-        if logits_or_probs.max() > 1.0 or logits_or_probs.min() < 0.0:
+        if self.from_logits:
             probs = torch.sigmoid(logits_or_probs)
         else:
             probs = logits_or_probs
@@ -59,15 +60,18 @@ class SpareseKeyframeMetrics:
         peak_mask = peak_mask.squeeze(1)  # [Batch, 64]
 
         # CPU/NumPy 离线贪心容差匹配
-        probs_np = probs.cpu().numpy()
-        targets_np = targets.cpu().numpy()
-        peak_mask_np = peak_mask.cpu().numpy()
+        batch_size = probs.size(0)
+        target_mask = targets > 0.5
 
         batch_size = probs.size(0)
         for i in range(batch_size):
-            # 获取预测波峰和真实标签的帧索引序列
-            pred_indices = np.where(peak_mask_np[i])[0].tolist()
-            gt_indices = np.where(targets_np[i] > 0.5)[0].tolist()
+            # 在gpu 端找出True 的位置，再 .cpu().tolist()，数据量从 Batch*64 锐减到几个数字
+            pred_indices = torch.nonzero(peak_mask[i]).squeeze(-1).cpu().tolist()
+            gt_indices = torch.nonzero(target_mask[i]).squeeze(-1).cpu().tolist()
+
+            # 兼容处理：如果只有一个极值点，torch.nonzero 返回的 list 可能是单个数字，转为list
+            if isinstance(pred_indices, int): pred_indices = [pred_indices]
+            if isinstance(gt_indices, int): gt_indices = [gt_indices]
 
             tp, fp, fn = self._match_1d_greedy(pred_indices, gt_indices)
             self.total_tp += tp

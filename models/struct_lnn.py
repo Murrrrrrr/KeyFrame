@@ -1,3 +1,5 @@
+from distutils.command.config import config
+
 import torch
 import torch.nn as nn
 
@@ -9,8 +11,16 @@ class StructLNN(nn.Module):
     Struct-LNN 核心决策网络
     整合 67 维多模态物理先验特征，经由液态连续时间网络，输出关键帧预测
     """
-    def __init__(self, input_dim=67, hidden_dim=128, num_classes=1):
+    def __init__(self, config=None, input_dim=67, hidden_dim=128, num_classes=1):
         super(StructLNN, self).__init__()
+
+        # 从 config 字典传入，方便后续在 train.py 统一管理
+        if config is not None:
+            model_cfg = config.get('model', {})
+            input_dim = model_cfg.get('input_dim', input_dim)
+            hidden_dim = model_cfg.get('hidden_dim', hidden_dim)
+            num_classes = model_cfg.get('num_classes', num_classes)
+
         self.hidden_dim = hidden_dim
 
         # 物理特征投影层（感知层融合）
@@ -26,12 +36,13 @@ class StructLNN(nn.Module):
         # 任务输出头（执行层）
         self.event_head = EventHead(hidden_dim=hidden_dim, num_classes=num_classes)
 
-    def forward(self, x, dt):
+    def forward(self, batch_data):
         """
         前向传播总线
         :param x: [Batch, seq_len, 61]
         :param dt: [Batch, seq_len, 1]
         """
+        x, dt = batch_data
         batch_size ,seq_len, _ = x.size()
 
         # 特征升维
@@ -70,7 +81,7 @@ if __name__ == "__main__":
     model = model.to(device)
     dummy_x, dummy_dt = dummy_x.to(device), dummy_dt.to(device)
 
-    out_logits = model(dummy_x, dummy_dt)
+    out_logits = model((dummy_x, dummy_dt))
 
     print(f"输入 X 维度: {dummy_x.shape}")
     print(f"输入 dt 维度: {dummy_dt.shape}")

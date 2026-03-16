@@ -3,10 +3,11 @@ import yaml
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import multiprocessing
 
-from datasets.pose_dataset import PoseDataset
+from datasets.pose_dataset import PoseSequenceDataset
 from models.struct_lnn import StructLNN
-from utils.metrics import SparseKeyframeMetrics
+from utils.metrics import SpareseKeyframeMetrics
 
 
 def parse_args():
@@ -15,7 +16,6 @@ def parse_args():
     parser.add_argument("--checkpoint", type=str, required=True, help="训练好的模型权重路径 (.pth)")
     return parser.parse_args()
 
-
 def main():
     args = parse_args()
 
@@ -23,10 +23,15 @@ def main():
         config = yaml.safe_load(f)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[Hardware] 评估挂载设备: {device}")
+    print(f" 评估挂载设备: {device}")
 
-    # 1. 实例化测试集
-    test_dataset = PoseDataset(config, mode='test')
+    if torch.cuda.is_available():
+        torch.backends.cudnn.benchmark = True
+
+    # 实例化测试集
+    num_workers = config['training'].get('num_workers', min(4, multiprocessing.cpu_count() // 2))
+    print(f" 启用的 DataLoader 工作线程数: {num_workers}")
+    test_dataset = PoseSequenceDataset(config, mode='test')
     test_loader = DataLoader(
         test_dataset,
         batch_size=config['training']['batch_size'],
@@ -34,19 +39,19 @@ def main():
         num_workers=4
     )
 
-    # 2. 挂载模型并加载参数
+    # 挂载模型并加载参数
     model = StructLNN(config).to(device)
     checkpoint = torch.load(args.checkpoint, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     print(f"[Model] 成功加载权重，该权重来自 Epoch: {checkpoint.get('epoch', 'N/A')}")
     model.eval()
 
-    # 3. 初始化容差评估器
+    # 初始化容差评估器
     tolerance = config['evaluation'].get('tolerance_windows', 3)
-    metrics = SparseKeyframeMetrics(tolerance=tolerance)
+    metrics = SpareseKeyframeMetrics(tolerance=tolerance)
     metrics.reset()
 
-    # 4. 执行测试推理
+    # 执行测试推理
     print(f"[Eval] 正在执行容差匹配评估 (Tolerance: ±{tolerance} frames)...")
 
     with torch.no_grad():
@@ -58,7 +63,7 @@ def main():
             logits = model(batch_data)
             metrics.update(logits, batch_labels)
 
-    # 5. 输出综合报告
+    # 输出综合报告
     result = metrics.compute()
 
     print("\n" + "=" * 40)

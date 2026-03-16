@@ -25,7 +25,7 @@ data:
 model:
   backbone: "CfC" # 闭式连续时间神经网络单元
 
-  input_dim: 61 # 30维空间 + 1维 M-Zeni + 30维速度 = 61维
+  input_dim: 67 # 33维空间 + 1维 M-Zeni + 33维速度 = 67维
   hidden_size: 64 # 隐藏层与投影：映射至更高表达能力的隐藏语义空间
   num_layers: 2
   output_dim: 1 #任务解码头：回归为一维的任务输出（触地/离地 logits）
