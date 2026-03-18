@@ -6,8 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="c589d863-93df-4603-a45d-8b55be732b4f" name="更改" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/struct_lnn.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/struct_lnn.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tools/train.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/train.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/check_labels.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/check_labels.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/generate_labels.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/generate_labels.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -40,6 +40,7 @@
     &quot;ASKED_MARK_IGNORED_FILES_AS_EXCLUDED&quot;: &quot;true&quot;,
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
     &quot;Python.check_labels.executor&quot;: &quot;Run&quot;,
+    &quot;Python.check_labels_generate.executor&quot;: &quot;Run&quot;,
     &quot;Python.generate_features.executor&quot;: &quot;Run&quot;,
     &quot;Python.generate_labels.executor&quot;: &quot;Run&quot;,
     &quot;Python.pose_dataset.executor&quot;: &quot;Run&quot;,
@@ -62,7 +63,6 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-PY-253.30387.173" />
         <option value="bundled-python-sdk-4762d8aabb82-6d6dccd035ac-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-253.30387.173" />
       </set>
     </attachedChunks>
