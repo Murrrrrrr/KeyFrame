@@ -71,10 +71,10 @@ class StructLNN(nn.Module):
 if __name__ == "__main__":
     print("正在验证 StructLNN 软硬件协同架构维度...")
     # 模拟从 pose_dataset.py 传过来的一个 Batch
-    dummy_x = torch.randn(32, 64, 61)  # [Batch, SeqLen, Features]
+    dummy_x = torch.randn(32, 64, 67)  # [Batch, SeqLen, Features]
     dummy_dt = torch.abs(torch.randn(32, 64, 1)) * 0.00833  # 模拟 50FPS 左右的 dt
 
-    model = StructLNN(input_dim=61, hidden_dim=128, num_classes=1)
+    model = StructLNN(input_dim=67, hidden_dim=128, num_classes=1)
 
     # 将模型和数据推入显存（如果有GPU）
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

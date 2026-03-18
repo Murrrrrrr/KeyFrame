@@ -134,19 +134,21 @@ def main():
             pbar.set_postfix({"Loss": f"{total_loss.item():.4f}",
                               "Phys": f"{phys_loss.item() if isinstance(phys_loss, torch.Tensor) else phys_loss:.4f}"})
 
-            scheduler.step() # 触发学习率调度器
+        scheduler.step() # 触发学习率调度器
 
         # 验证阶段
         model.eval()
         val_metrics.reset()
         val_loss_epoch = 0.0
 
+        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+
         with torch.no_grad():
             for batch_data, batch_labels in val_loader:
                 batch_data = tuple(item.to(device, non_blocking=True) for item in batch_data)
                 batch_labels = batch_labels.to(device, non_blocking=True)
 
-                with autocast():
+                with autocast(device_type=device_type):
                     logits = model(batch_data)
                     loss, _, _ = criterion(logits, batch_labels)
 
