@@ -2,6 +2,7 @@ import os
 import numpy as np
 import glob
 from scipy.signal import find_peaks
+from utils.physics_utils import calculate_mzeni_prior
 
 def normalize_signal(signal):
     """将一维信号归一化到 0~1 之间，便于不同量纲的特征融合"""
@@ -45,42 +46,11 @@ def generate_labels_for_athlete_pose(dataset_root, output_root, splits):
                 keypoints_3d = np.load(h36m_path)
                 num_frames = keypoints_3d.shape[0]
 
-                # 剥离左右脚的3D空间坐标
-                pelvis_coords = keypoints_3d[:, PELVIS_IDX, :]
-                left_foot_heel_coords = keypoints_3d[:, LEFT_FOOT_HEEL_IDX, :]
-                right_foot_heel_coords = keypoints_3d[:, RIGHT_FOOT_HEEL_IDX, :]
-                left_foot_ankle_coords = keypoints_3d[:, LEFT_FOOT_ANKLE_IDX, :]
-                right_foot_ankle_coords = keypoints_3d[:, RIGHT_FOOT_ANKLE_IDX, :]
-                left_foot_toe_coords = keypoints_3d[:, LEFT_FOOT_TOE_IDX, :]
-                right_foot_toe_coords = keypoints_3d[:, RIGHT_FOOT_TOE_IDX, :]
-
-                # 根据视觉置信度调节踝关节约束的比重
-                ankle_weight = 0.5
-
-                # 经典Zeni算法(足部-骨盆相对位移)
-                zeni_left_hs = np.linalg.norm(left_foot_heel_coords - pelvis_coords, axis=1)
-                zeni_left_to = np.linalg.norm(left_foot_toe_coords - pelvis_coords, axis=1)
-                zeni_left = zeni_left_hs + zeni_left_to + ankle_weight * np.linalg.norm(
-                    left_foot_ankle_coords - pelvis_coords, axis=1)
-                zeni_right_hs = np.linalg.norm(right_foot_heel_coords - pelvis_coords, axis=1)
-                zeni_right_to = np.linalg.norm(right_foot_toe_coords - pelvis_coords, axis=1)
-                zeni_right = zeni_right_hs + zeni_right_to + ankle_weight * np.linalg.norm(
-                    right_foot_ankle_coords - pelvis_coords, axis=1)
-                zeni_signal = np.maximum(zeni_left, zeni_right)
-
-                # 计算 M-Zeni 物理特征（双足空间欧式距离）
-                m_zeni_signal = np.linalg.norm(left_foot_toe_coords - right_foot_toe_coords, axis=1) + \
-                                np.linalg.norm(left_foot_heel_coords - right_foot_heel_coords, axis=1) + \
-                                ankle_weight * np.linalg.norm(left_foot_ankle_coords - right_foot_ankle_coords, axis=1)
-
-                # 联合约束：将两个信号归一化后进行融合
-                # 本实验采用相乘来放大极值瞬间的“尖锐度”，消除单一算法的误检
-                norm_zeni = normalize_signal(zeni_signal)
-                norm_m_zeni = normalize_signal(m_zeni_signal)
-                combined_constraint_signal = norm_zeni * norm_m_zeni  # 构建最终的联合物理判据信号
+                combined_constraint_signal = calculate_mzeni_prior(keypoints_3d, ankle_weight=0.5) # 构建最终的联合物理判据信号
+                signal_1d = combined_constraint_signal.flatten()
 
                 # 寻峰与生成标签
-                peaks, properties = find_peaks(combined_constraint_signal, distance=15, prominence=0.05)
+                peaks, properties = find_peaks(signal_1d, distance=15, prominence=0.05)
 
                 # 生成对应的独热编码标签
                 labels = np.zeros((num_frames, 1), dtype=np.float32)

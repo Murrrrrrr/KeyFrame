@@ -21,6 +21,11 @@ data:
   use_normalization: true # 是否开启骨盆原点对齐与动态尺度归一化
   extract_m_zeni: true  # 是否计算 M-Zeni 物理特征
 
+  # 数据预处理与特征工程特定参数
+  ema_alpha: 0.7
+  ankle_weight: 0.5
+  selected_indices: [0,1,2,3,4,5,6,7,8,9,10]
+
 # 网络架构配置
 model:
   backbone: "CfC" # 闭式连续时间神经网络单元
