@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class StructLNNLoss(nn.Module):
-    def __init__(self, alpha=0.25, gamma=2.0, physics_weight=0.1, min_step_frames=5):
+    def __init__(self, alpha=0.25, gamma=2.0, physics_weight=0.1, min_step_frames=5, pos_weight=60.0):
         """
         联合损失函数： Focal Loss + 物理常识惩罚
         :param alpha: Focal Loss 正负样本平衡系数
@@ -17,6 +17,7 @@ class StructLNNLoss(nn.Module):
         self.gamma = gamma
         self.physics_weight = physics_weight
         self.min_step_frames = min_step_frames
+        self.pos_weight = pos_weight
 
     def forward(self, logits, targets, dt=None):
         """
@@ -25,7 +26,8 @@ class StructLNNLoss(nn.Module):
         :param dt: [Batch, 64, 1] 物理时间间隔，用于未来的积分约束
         """
         # 核心分类：BCE Focal Loss
-        bce_loss = F.binary_cross_entropy_with_logits(logits, targets, reduction='none')
+        pos_weight_tensor = torch.tensor([self.pos_weight], device=logits.device)
+        bce_loss = F.binary_cross_entropy_with_logits(logits, targets, reduction='none', pos_weight=pos_weight_tensor)
         probs = F.sigmoid(logits)
 
         # 动态计算 focal 权重：p_t
@@ -42,7 +44,7 @@ class StructLNNLoss(nn.Module):
             # 物理含义：在min_step_frames 窗口内，所有帧的预测概率总和不应超过 1
             smoothed_probs = probs.squeeze(-1) # [Batch, 64]
             window_sum = F.avg_pool1d(
-                smoothed_probs.unsqueeze(-1),
+                smoothed_probs.unsqueeze(1),
                 kernel_size = self.min_step_frames,
                 stride = 1,
                 padding = self.min_step_frames // 2

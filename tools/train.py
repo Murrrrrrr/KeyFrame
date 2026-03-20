@@ -69,10 +69,14 @@ def main():
     # 提取 Loss 配置
     bce_weight = config['training'].get('loss', {}).get('bce_weight', 1.0)
     physics_weight = config['training'].get('loss', {}).get('physics_penalty_weight', 0.5)
-    criterion = StructLNNLoss(physics_weight=physics_weight).to(device)
+    pos_weight = config['training'].get('loss', {}).get('pos_weight', 60.0)
+    focal_gamma = config['training'].get('loss', {}).get('focal_gamma', 2.0)
+    criterion = StructLNNLoss(physics_weight=physics_weight,
+                              pos_weight=pos_weight,
+                              gamma=focal_gamma).to(device)
 
     # 优化器与混合精度引擎 (AMP)
-    optimizer = optim.AdamW(model.parameters(), lr=config['training']['learning_rate'], weight_decay=1e-4)
+    optimizer = optim.AdamW(model.parameters(), lr=config['training']['learning_rate'], weight_decay=1e-2)
     scaler = GradScaler("cuda", enabled=torch.cuda.is_available())  # 自动缩放梯度，防止 float16 下的梯度下溢
 
     epochs = config['training']['epochs']
@@ -100,7 +104,9 @@ def main():
 
     # 评估标尺
     tolerance = config['evaluation'].get('tolerance_windows', 3)
-    val_metrics = SpareseKeyframeMetrics(tolerance=tolerance)
+    val_metrics = SpareseKeyframeMetrics(tolerance=tolerance,
+                                         from_logits=True,
+                                         threshold=0.3)
 
     # 训练主循环
     epochs = config['training']['epochs']

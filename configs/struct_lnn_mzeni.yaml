@@ -44,6 +44,8 @@ training:
   loss:
     bce_weight: 1.0 #基础二元交叉熵分类损失
     physics_penalty_weight: 0.5 # 基于 M-Zeni 的物理常识惩罚权重
+    pos_weight: 60.0
+    focal_gamma: 2.0
 
 evaluation:
   tolerance_windows: 3 # 正负三帧的容差窗口大小 W=3
