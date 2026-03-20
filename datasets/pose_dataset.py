@@ -61,7 +61,8 @@ class PoseSequenceDataset(Dataset):
                     data_path = os.path.join(root, file)
                     # 镜像映射到标签路径，保持相对目录树一致
                     rel_dir = os.path.relpath(root, self.data_dir)
-                    label_path = os.path.join(self.label_dir, rel_dir, 'labels.npy')
+                    label_file_name = file.replace('feature.npy', 'label.npy')
+                    label_path = os.path.join(self.label_dir, rel_dir, label_file_name)
 
                     if not os.path.exists(label_path):
                         print(f"[数据缺失警告] 找不到对应的标签文件，跳过：{label_path}")
