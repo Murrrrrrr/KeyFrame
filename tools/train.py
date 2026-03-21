@@ -64,7 +64,8 @@ def main():
     )
 
     # 核心模型与物理损失初始化
-    model = StructLNN(config).to(device)
+    model = StructLNN(config=config)
+    model = model.to(device)
 
     # 提取 Loss 配置
     bce_weight = config['training'].get('loss', {}).get('bce_weight', 1.0)

@@ -44,6 +44,7 @@ AthletePose3D/
 configs/*
 
 # Model checkpoints
+checkpoints
 models/checkpoints/
 models/*.pt
 models/*.onnx
