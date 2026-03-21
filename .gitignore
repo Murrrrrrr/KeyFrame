@@ -57,3 +57,6 @@ hardware/*.npy
 *.bak
 *.swp
 *.swo
+
+# Result plot
+result

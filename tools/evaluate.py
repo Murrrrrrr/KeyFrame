@@ -1,6 +1,9 @@
+import os
 import argparse
 import yaml
 import torch
+import numpy as np
+import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import multiprocessing
@@ -9,77 +12,196 @@ from datasets.pose_dataset import PoseSequenceDataset
 from models.struct_lnn import StructLNN
 from utils.metrics import SpareseKeyframeMetrics
 
+# 设置 plt 中文字体
+plt.rcParams['font.sans-serif'] = ['SimHei']
+plt.rcParams['axes.unicode_minus'] = False
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Struct-LNN 测试集评估工具")
+    parser = argparse.ArgumentParser(description="Struct-LNN 测试机评估工具")
     parser.add_argument("--config", type=str, required=True, help="YAML 配置文件路径")
-    parser.add_argument("--checkpoint", type=str, required=True, help="训练好的模型权重路径 (.pth)")
+    parser.add_argument("--checkpoint", type=str, required=True, help="训练好的模型权重路径（.pth）")
+    parser.add_argument("--save_dir", type=str, default="result", help="图表保存目录")
     return parser.parse_args()
+
+def plot_confusion_matrix(result, total_frames, save_dir):
+    """
+    绘制混淆矩阵
+    """
+    tp = int(result['TP'])
+    fp = int(result['FP'])
+    fn = int(result['FN'])
+    tn = int(total_frames) - (tp + fp + fn)
+    fig, ax = plt.subplots(figsize=(7,6), dpi=300)
+    cm = np.array([[tn, fp], [fn, tp]])
+
+    # 绘制热力图底色
+    cax = ax.matshow(np.log1p(cm), cmap='Blues', alpha=0.8)
+
+    for i in range(2):
+        for j in range(2):
+            ax.text(j, i, f"{cm[i, j]:,}", ha="center", va="center",
+                    fontsize=14, fontweight="bold",
+                    color="white" if i==j else "black")
+    ax.set_xticks([0, 1])
+    ax.set_yticks([0, 1])
+    ax.set_xticklabels(['预测：腾空', '预测：触地'])
+    ax.set_yticklabels(['真实：腾空', '真实：触地'])
+    ax.set_title("关键帧混淆矩阵", pad=20, fontsize=16, fontweight='bold')
+
+    plt.tight_layout()
+    save_path = os.path.join(save_dir, "confusion_matrix.png")
+    plt.savefig(save_path)
+    plt.close(fig)
+    print(f" 图表 1 已保存：{save_path}")
+
+def plot_metrics_bar(result, save_dir):
+    """
+    性能指标柱状图
+    """
+    fig, ax = plt.subplots(figsize=(7,6), dpi=300)
+    metrics_names = ['精确率（Precision）', '召回率（Recall）', 'F1 分数']
+    metrics_values = [result['Precision'], result['Recall'], result['F1_Score']]
+    colors = ['#ff7f0e', '#2ca02c', '#d62728']
+
+    bars = ax.bar(metrics_names, metrics_values, color=colors, width=0.5, alpha=0.85)
+    ax.set_ylim(0, 1.15)
+    ax.set_title("Test集核心性能表现", pad=20, fontsize=16, fontweight='bold')
+
+    for bar in bars:
+        height = bar.get_height()
+        ax.annotate(f'{height:.2f}',
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0,5),
+                    textcoords='offset points',
+                    ha='center',va='bottom',fontsize=14,fontweight='bold')
+    plt.tight_layout()
+    save_path = os.path.join(save_dir, "metrics_bar.png")
+    plt.savefig(save_path)
+    plt.close(fig)
+    print(f" 图表 2 已保存：{save_path}")
+
+def plot_event_outcomes_pie(result, save_dir):
+    """
+    事件诊断双饼图
+    """
+    tp, fp, fn = int(result['TP']), int(result['FP']), int(result['FN'])
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6), dpi=300)
+
+    # 左侧饼图：真实事件去向（召回视角）
+    labels_gt = [f'成功检测 (TP)\n{tp}次', f'不幸漏报 (FN)\n{fn}次']
+    sizes_gt = [tp, fn]
+    colors_gt = ['#2ca02c', '#9370DB']
+    explode_gt = (0.05, 0) # 凸显出TP
+
+    ax1.pie(sizes_gt, explode=explode_gt, labels=labels_gt, colors=colors_gt,
+            autopct='%1.1f%%', shadow=False, startangle=90,
+            labeldistance=1.15, pctdistance=0.75,
+            textprops={'fontsize': 12, 'fontweight': 'bold'})
+    ax1.set_title("真实触地事件被检测占比\n(Ground Truth Coverage)", fontsize = 14, fontweight='bold')
+
+    # 右侧饼图：模型报警纯度 (精确视角)
+    labels_pred = [f'正确报警 (TP)\n{tp}次', f'错误报警 (FP)\n{fp}次']
+    sizes_pred = [tp, fp]
+    colors_pred = ['#1f77b4', '#d62728']
+    explode_pred = (0.05, 0)  # 凸显 TP
+
+    ax2.pie(sizes_pred, explode=explode_pred, labels=labels_pred, colors=colors_pred,
+            autopct='%1.1f%%', shadow=False, startangle=90,
+            labeldistance=1.15,pctdistance=0.75,
+            textprops={'fontsize': 11, 'fontweight': 'bold'})
+    ax2.set_title("模型输出报警准确率占比\n(Prediction Purity)", fontsize=14, fontweight='bold')
+
+    plt.subplots_adjust(top=0.85,
+                        bottom=0.15,
+                        left=0.08,
+                        right=0.92,
+                        wspace=0.3)
+    save_path = os.path.join(save_dir, "event_outcomes_pie.png")
+    plt.savefig(save_path)
+    plt.close(fig)
+    print(f" 图表 3 已保存: {save_path}")
+
 
 def main():
     args = parse_args()
 
-    with open(args.config, "r") as f:
+    with open(args.config, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f" 评估挂载设备: {device}")
+    print(f"[*] 评估挂载设备: {device}")
 
     if torch.cuda.is_available():
         torch.backends.cudnn.benchmark = True
 
     # 实例化测试集
-    num_workers = config['training'].get('num_workers', min(4, multiprocessing.cpu_count() // 2))
-    print(f" 启用的 DataLoader 工作线程数: {num_workers}")
-    test_dataset = PoseSequenceDataset(config, mode='test')
+    num_workers = 0  # 强制设为0，防止 Windows 测试时发生多进程管道崩溃
+    print(f"[*] 启用的 DataLoader 工作线程数: {num_workers}")
+
+    # 修复 Bug 1：参数名是 split='test'
+    test_dataset = PoseSequenceDataset(config, split='test')
     test_loader = DataLoader(
         test_dataset,
         batch_size=config['training']['batch_size'],
         shuffle=False,
-        num_workers=4
+        num_workers=num_workers
     )
 
     # 挂载模型并加载参数
     model = StructLNN(config).to(device)
     checkpoint = torch.load(args.checkpoint, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
-    print(f"[Model] 成功加载权重，该权重来自 Epoch: {checkpoint.get('epoch', 'N/A')}")
+    print(f"[*] 成功加载权重，该权重来自 Epoch: {checkpoint.get('epoch', 'N/A')}")
     model.eval()
 
     # 初始化容差评估器
     tolerance = config['evaluation'].get('tolerance_windows', 3)
-    metrics = SpareseKeyframeMetrics(tolerance=tolerance)
+    # 修复 Bug 3：必须开启 from_logits=True 和合适的 threshold
+    metrics = SpareseKeyframeMetrics(tolerance=tolerance, from_logits=True, threshold=0.3)
     metrics.reset()
 
-    # 执行测试推理
-    print(f"[Eval] 正在执行容差匹配评估 (Tolerance: ±{tolerance} frames)...")
+    print(f"\n[Eval] 正在执行容差匹配评估 (Tolerance: ±{tolerance} frames)...")
 
+    # 执行测试推理
     with torch.no_grad():
         for batch_data, batch_labels in tqdm(test_loader, desc="Testing"):
-            batch_data = batch_data.to(device, non_blocking=True)
+            # 修复 Bug 2：batch_data 是多模态元组，必须解包分别 to(device)
+            batch_data = tuple(item.to(device, non_blocking=True) for item in batch_data)
             batch_labels = batch_labels.to(device, non_blocking=True)
 
-            # 边缘设备通常采用 FP32 或针对性量化推理，这里保持 FP32 精度验证
             logits = model(batch_data)
             metrics.update(logits, batch_labels)
 
     # 输出综合报告
     result = metrics.compute()
 
-    print("\n" + "=" * 40)
-    print(f"        STRUCT-LNN 最终评估报告")
-    print("=" * 40)
+    # 计算测试集处理的总帧数，用于绘制混淆矩阵的 TN
+    total_frames = len(test_dataset) * config['training'].get('seq_len', 64)
+
+    print("\n" + "=" * 50)
+    print(f"         STRUCT-LNN 最终评估报告")
+    print("=" * 50)
     print(f" 匹配容差 (Tolerance) : ±{tolerance} 帧")
-    print(f" 测试集样本数         : {len(test_dataset)}")
-    print("-" * 40)
-    print(f" True Positives (TP) : {result['TP']}")
-    print(f" False Positives(FP) : {result['FP']}")
-    print(f" False Negatives(FN) : {result['FN']}")
-    print("-" * 40)
-    print(f" Precision           : {result['Precision']:.4f}")
-    print(f" Recall              : {result['Recall']:.4f}")
-    print(f" F1-Score            : {result['F1_Score']:.4f}")
-    print("=" * 40)
+    print(f" 测试集样本数         : {len(test_dataset)} (总计 {total_frames} 帧)")
+    print("-" * 50)
+    print(f" 真正例 (True Positives)  : {result['TP']}")
+    print(f" 假正例 (False Positives) : {result['FP']} (误报)")
+    print(f" 假阴性 (False Negatives) : {result['FN']} (漏报)")
+    print("-" * 50)
+    print(f" 精确率 (Precision)       : {result['Precision']:.4f}")
+    print(f" 召回率 (Recall)          : {result['Recall']:.4f}")
+    print(f" F1-Score                 : {result['F1_Score']:.4f}")
+    print("=" * 50)
+
+    os.makedirs(args.save_dir, exist_ok=True)
+
+    print("\n[绘图模块] 正在生成独立的学术图表...")
+    # 分别调用三个函数，生成三张独立的图片
+    plot_confusion_matrix(result, total_frames, args.save_dir)
+    plot_metrics_bar(result, args.save_dir)
+    plot_event_outcomes_pie(result, args.save_dir)
+    print("[绘图模块] 全部图表已生成完毕！")
 
 if __name__ == "__main__":
     main()
