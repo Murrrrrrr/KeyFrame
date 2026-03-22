@@ -23,7 +23,7 @@ class PoseSequenceDataset(Dataset):
 
         self.seq_len = dataset_cfg.get('seq_len', 64)
         self.stride = dataset_cfg.get('stride', 16)
-        self.base_dt = dataset_cfg.get('base_fps', 120)
+        self.base_dt = dataset_cfg.get('fps', 120)
 
         # 仅在 train 模式且 config 允许时开启硬件抖动仿真
         self.simulate_jitter = dataset_cfg.get('simulate_jitter', False) and (split == 'train')
@@ -106,7 +106,7 @@ class PoseSequenceDataset(Dataset):
         features = self._get_mmap(sample_info['data_path'])[start:end].copy()
         if not self.extract_m_zeni:
             features = features[:, :-1]
-            
+
         labels = self._get_mmap(sample_info['label_path'])[start:end].copy()
 
         # 硬件时间戳抽象：生成 dt 数组

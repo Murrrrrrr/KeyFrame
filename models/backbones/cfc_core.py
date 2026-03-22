@@ -35,7 +35,9 @@ class CfCCell(nn.Module):
         time_shift = self.time_shift_fc(xh_cat)
 
         # CfC 闭式连续时间求解核心公式
-        decay = torch.exp(-time_scale*dt - time_shift)
+        exponent = -time_scale * dt - time_shift
+        exponent = torch.clamp(exponent, max=0.0)
+        decay = torch.exp(exponent) # 保证 decay 永远在 (0, 1] 之间
         h_new = hx * decay + state_update * (1.0 - decay)
 
         return h_new

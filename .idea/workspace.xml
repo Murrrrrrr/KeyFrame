@@ -9,9 +9,11 @@
       <change beforePath="$PROJECT_DIR$/checkpoints/Running_Gait_Analsy_best.pth" beforeDir="false" afterPath="$PROJECT_DIR$/checkpoints/Running_Gait_Analsy_best.pth" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/configs/struct_lnn_mzeni.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/configs/struct_lnn_mzeni.yaml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/datasets/pose_dataset.py" beforeDir="false" afterPath="$PROJECT_DIR$/datasets/pose_dataset.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/mlp_baseline.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/mlp_baseline.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tools/train_mlp.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/train_mlp.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/visualizer.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/visualizer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/backbones/cfc_core.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/backbones/cfc_core.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/generate_features.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/generate_features.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/train.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/train.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/uv.lock" beforeDir="false" afterPath="$PROJECT_DIR$/uv.lock" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
