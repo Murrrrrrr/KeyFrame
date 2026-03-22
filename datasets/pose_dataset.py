@@ -15,6 +15,8 @@ class PoseSequenceDataset(Dataset):
 
         # 从config 中安全解析参数
         dataset_cfg = config.get('dataset', {})
+        if not dataset_cfg:  # 兼容处理
+            dataset_cfg = config.get('data', {})
         self.data_dir = dataset_cfg.get('data_dir', 'data/processed_features')
         self.label_dir = dataset_cfg.get('label_dir', 'data/processed_labels')
         self.split_file = dataset_cfg.get('split_file', 'data/splits/athlete_pose_splits.json')
@@ -25,6 +27,9 @@ class PoseSequenceDataset(Dataset):
 
         # 仅在 train 模式且 config 允许时开启硬件抖动仿真
         self.simulate_jitter = dataset_cfg.get('simulate_jitter', False) and (split == 'train')
+        self.jitter_std = dataset_cfg.get('jitter_std', 0.2)
+        self.drop_rate = dataset_cfg.get('drop_rate', 0.05)
+        self.extract_m_zeni = dataset_cfg.get('extract_m_zeni', True)
         self.samples = []
 
         # 初始化一个文件映射缓存池，避免 __getitem__ 中疯狂打开/关闭
@@ -99,6 +104,9 @@ class PoseSequenceDataset(Dataset):
 
         # 提取多模态特征矩阵
         features = self._get_mmap(sample_info['data_path'])[start:end].copy()
+        if not self.extract_m_zeni:
+            features = features[:, :-1]
+            
         labels = self._get_mmap(sample_info['label_path'])[start:end].copy()
 
         # 硬件时间戳抽象：生成 dt 数组
@@ -106,9 +114,9 @@ class PoseSequenceDataset(Dataset):
 
         # (软硬协同模块) 开启时磨你边缘端 I2C/MIPI 接口读取传感器时的时钟抖动和总线阻塞丢帧
         if self.simulate_jitter:
-            jitter = np.random.normal(0, self.base_dt * 0.2, (self.seq_len, 1))
+            jitter = np.random.normal(0, self.base_dt * self.jitter_std, (self.seq_len, 1))
             dt_array += np.clip(dt_array + jitter, a_min=1e-4, a_max=None)
-            drop_mask = np.random.rand(self.seq_len, 1) < 0.05
+            drop_mask = np.random.rand(self.seq_len, 1) < self.drop_rate
             dt_array[drop_mask] *= np.random.randint(2, 4)
 
         # 转换为PyTorch Tensors

@@ -13,8 +13,6 @@ import multiprocessing
 from datasets.pose_dataset import PoseSequenceDataset
 from models.physics_loss import StructLNNLoss
 from utils.metrics import SpareseKeyframeMetrics
-
-# 【关键修改】：导入刚才新建的 MLP 基线模型
 from models.mlp_baseline import MLPBaseline
 
 
@@ -31,8 +29,12 @@ def main():
     with open(args.config, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
+    # 兼容处理：YAML 中写的是 data: 而 Dataset 脚本中读取的是 dataset:
+    if 'data' in config and 'dataset' not in config:
+        config['dataset'] = config['data']
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[*] MLP 训练引擎挂载设备: {device}")
+    print(f"[*] MLP 训练引擎挂载设备: {device} | 实验名称: {config.get('experiment_name')}")
 
     os.makedirs("checkpoints", exist_ok=True)
     best_f1 = 0.0
@@ -47,14 +49,16 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size=config['training']['batch_size'], shuffle=False,
                             num_workers=num_workers, pin_memory=True)
 
-    # 【关键修改】：实例化 MLP 基线模型
+    # 实例化 MLP 基线模型，传入对齐好的 config
     model = MLPBaseline(config=config).to(device)
 
-    # 损失函数、优化器等与之前完全保持一致
-    bce_weight = config['training'].get('loss', {}).get('bce_weight', 1.0)
-    physics_weight = config['training'].get('loss', {}).get('physics_penalty_weight', 0.5)
-    pos_weight = config['training'].get('loss', {}).get('pos_weight', 60.0)
-    focal_gamma = config['training'].get('loss', {}).get('focal_gamma', 2.0)
+    # 精确解析损失函数权重
+    loss_cfg = config['training'].get('loss', {})
+    bce_weight = loss_cfg.get('bce_weight', 1.0)
+    physics_weight = loss_cfg.get('physics_penalty_weight', 0.5)
+    pos_weight = loss_cfg.get('pos_weight', 60.0)
+    focal_gamma = loss_cfg.get('focal_gamma', 2.0)
+
     criterion = StructLNNLoss(physics_weight=physics_weight, pos_weight=pos_weight, gamma=focal_gamma).to(device)
 
     optimizer = optim.AdamW(model.parameters(), lr=config['training']['learning_rate'], weight_decay=1e-2)
@@ -65,6 +69,8 @@ def main():
     val_metrics = SpareseKeyframeMetrics(tolerance=tolerance, from_logits=True, threshold=0.3)
 
     epochs = config['training']['epochs']
+    device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+
     for epoch in range(start_epoch, epochs):
         model.train()
         train_loss_epoch = 0.0
@@ -75,7 +81,7 @@ def main():
             batch_labels = batch_labels.to(device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
-            device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+
             with autocast(device_type=device_type):
                 logits = model(batch_data)
                 total_loss, focal_loss, phys_loss = criterion(logits, batch_labels)
@@ -89,16 +95,20 @@ def main():
 
         scheduler.step()
 
+        # ---------------- 验证阶段 ----------------
         model.eval()
         val_metrics.reset()
         val_loss_epoch = 0.0
+
         with torch.no_grad():
             for batch_data, batch_labels in val_loader:
                 batch_data = tuple(item.to(device, non_blocking=True) for item in batch_data)
                 batch_labels = batch_labels.to(device, non_blocking=True)
+
                 with autocast(device_type=device_type):
                     logits = model(batch_data)
                     loss, _, _ = criterion(logits, batch_labels)
+
                 val_loss_epoch += loss.item()
                 val_metrics.update(logits, batch_labels)
 
@@ -108,15 +118,17 @@ def main():
         print(f"--> Epoch {epoch + 1} Val Loss: {val_loss_epoch / len(val_loader):.4f} | "
               f"Val F1: {current_f1:.4f} (P: {metrics_result['Precision']:.4f}, R: {metrics_result['Recall']:.4f})")
 
+        # 核心：保存最佳权重
         if current_f1 > best_f1:
             best_f1 = current_f1
-            save_path = os.path.join("checkpoints", f"{config['experiment_name']}_best.pth")
+            # 使用 YAML 中的 experiment_name 作为前缀
+            save_path = os.path.join("checkpoints", f"{config.get('experiment_name', 'mlp_baseline')}_best.pth")
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'best_f1': best_f1,
             }, save_path)
-            print(f"[Checkpoint] MLP 最优权重已保存 -> F1: {best_f1:.4f}")
+            print(f"[Checkpoint] MLP 最优权重已保存 -> F1: {best_f1:.4f} (Saved to {save_path})")
 
 
 if __name__ == "__main__":
