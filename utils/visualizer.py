@@ -16,7 +16,7 @@ plt.rcParams['axes.unicode_minus'] = False
 def parse_args():
     parser = argparse.ArgumentParser(description='跑姿关键帧可视化工具')
     parser.add_argument("--config", type=str, default="configs/struct_lnn_mzeni.yaml", help="YAML 配置文件路径")
-    parser.add_argument("--checkpoint", type=str, default="checkpoints/Running_Gait_Analsy_pos_weight=30_best.pth", help="训练好的模型权重路径")
+    parser.add_argument("--checkpoint", type=str, default="checkpoints/Running_Gait_Analsy_1_best.pth", help="训练好的模型权重路径")
     parser.add_argument("--sample_idx", type=int, default=15, help="在验证集中抽取第几个样本进行可视化")
     parser.add_argument("--save_path", type=str, default="result_visualization.png", help="图表保存路径")
     return parser.parse_args()
