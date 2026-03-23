@@ -22,7 +22,7 @@ data:
   stride: 16
 
    # 骨架解析参数
-  use_normalization: true # 是否开启骨盆原点对齐与动态尺度归一化
+  use_normalization: false # 是否开启骨盆原点对齐与动态尺度归一化
   extract_m_zeni: true  # 是否计算 M-Zeni 物理特征
 
   # 数据预处理与特征工程特定参数
@@ -52,8 +52,8 @@ training:
 
   loss:
     bce_weight: 1.0 #基础二元交叉熵分类损失
-    physics_penalty_weight: 0.5 # 基于 M-Zeni 的物理常识惩罚权重
-    pos_weight: 50.0
+    physics_penalty_weight: 1.0 # 基于 M-Zeni 的物理常识惩罚权重
+    pos_weight: 30.0
     focal_gamma: 2.0
 
 evaluation:

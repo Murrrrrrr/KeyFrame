@@ -55,10 +55,19 @@ class SpareseKeyframeMetrics:
         if max_vals.shape[-1] != probs.shape[-1]:
             max_vals = max_vals[..., :probs.shape[-1]]
 
-        # 波峰触发条件：当前点是局部最大值 AND 概率超过硬件预设阈值
-        peak_mask = (probs_unsqueeze == max_vals) & (probs_unsqueeze >= self.threshold)
-        peak_mask = peak_mask.squeeze(1)  # [Batch, 64]
-
+        # 严格的波峰隔离与平台期单点提取机制
+        probs_squeeze = probs_unsqueeze.squeeze(1)
+        max_vals_squeeze = max_vals.squeeze(1)
+        # 基础条件：当前点必须等于感受野内的最大值，且超过硬件触发阈值
+        is_max = (probs_squeeze == max_vals_squeeze) & (probs_squeeze >= self.threshold)
+        # 构造时间轴左右错位张量，用于对比相邻帧的物理梯度
+        shifted_right = torch.cat([torch.zeros_like(probs_squeeze[:, :1]), probs_squeeze[:, :-1]], dim=1)
+        shifted_left = torch.cat([probs_squeeze[:, 1:], torch.zeros_like(probs_squeeze[:, -1:])], dim=1)
+        # 波峰判定应逻辑：
+        # 必须大于左边的一帧 (probs_squeeze > shifted_right) -> 寻找上升沿
+        # 必须大于或等于右边的一帧 (probs_squeeze >= shifted_left) -> 允许波峰持续两帧，但只取左侧边缘
+        # 如果模型输出一条纯平直线(例如全0.9)，由于它不大于左边的帧，这一整条直线都会被过滤掉
+        peak_mask = is_max & (probs_squeeze > shifted_right) & (probs_squeeze >= shifted_left)
         # CPU/NumPy 离线贪心容差匹配
         batch_size = probs.size(0)
         target_mask = targets > 0.5

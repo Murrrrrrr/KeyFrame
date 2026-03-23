@@ -13,20 +13,15 @@ def normalize_signal(signal):
         return signal
     return (signal - min_val) / (max_val - min_val)
 
-def extract_67d_features(h36m_file_path,fps,ema_alpha,ankle_weight,selected_indices, use_normalization=True):
+def extract_67d_features(h36m_file_path,fps,ema_alpha,ankle_weight,selected_indices):
     """
     填入软硬件协同特征提取逻辑：单目空间坐标 + M-Zeni规则 + 速度特征
     """
     # 读取 H36M 3D 骨架数据（Frame, Joints, 3）
     keypoints_3d = np.load(h36m_file_path)
     num_frames = keypoints_3d.shape[0]
-    if use_normalization:
-        pelvis_center = keypoints_3d[:, 0:1, :].copy()
-        keypoints_3d = keypoints_3d - pelvis_center
-        # 提取身体躯干长度作为基准尺（index 13: 脖子，index 12: 胸部）
-        spine_length = np.linalg.norm(keypoints_3d[:, 13:12, :] - keypoints_3d[:, 0:1, :], axis=1, keepdims=True)
-        spine_length = np.clip(spine_length, a_min=1e-3, a_max=None) # 防止除 0 小操作
-        keypoints_3d = keypoints_3d / spine_length
+    pelvis_center = keypoints_3d[:, 0:1, :].copy()
+    keypoints_3d = keypoints_3d - pelvis_center
 
     # 硬件时间基准
     dt = 1.0 / fps # 视频帧率
@@ -80,7 +75,6 @@ def main():
     ANKLE_WEIGHT = config['data'].get("ankle_weight", 0.5)
     SELECTED_INDICES = config['data'].get("selected_indices", [0,1,2,3,4,5,6,7,8,9,10])
     USE_NORM = config['data'].get("use_normalization", True)
-
     RAW_DATA_DIR = os.path.join(PROJECT_ROOT, "AthletePose3D", "data")
     OUTPUT_FEATURES_DIT = os.path.join(PROJECT_ROOT, "data", "processed_features")
     SPLIT_JSON_PATH = os.path.join(PROJECT_ROOT, "data", "splits", "athlete_pose_splits.json")
@@ -117,7 +111,6 @@ def main():
             ema_alpha=EMA_ALPHA,
             ankle_weight=ANKLE_WEIGHT,
             selected_indices=SELECTED_INDICES,
-            use_normalization=USE_NORM
         )
         base_filename = os.path.basename(h36m_file)
         feature_name = base_filename.replace("_h36m.npy", "_feature.npy")

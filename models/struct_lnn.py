@@ -22,6 +22,7 @@ class StructLNN(nn.Module):
             num_classes = model_cfg.get('num_classes', num_classes)
 
         self.hidden_dim = hidden_dim
+        self.input_norm = nn.LayerNorm(input_dim)
 
         # 物理特征投影层（感知层融合）
         self.feature_projection = nn.Sequential(
@@ -44,9 +45,11 @@ class StructLNN(nn.Module):
         """
         x, dt = batch_data
         batch_size ,seq_len, _ = x.size()
+        # 保留 M-Zeni 等物理信号波形的前提下，将其拉入神经网络适宜的数值区间
+        x_normlized = self.input_norm(x)
 
         # 特征升维
-        x_feature = self.feature_projection(x)
+        x_feature = self.feature_projection(x_normlized)
 
         # 隐状态初始化（硬件端初始化为0）
         hx = torch.zeros(batch_size, self.hidden_dim, device=x.device)
@@ -55,8 +58,7 @@ class StructLNN(nn.Module):
         # 时序推进（沿时间抽滑窗）
         for t in range(seq_len):
             x_t = x_feature[:, t, :]
-            dt_t = dt[:, t, :]
-
+            dt_t = dt[:, t, :] * 10
             hx = self.rnn_cell(x_t, hx, dt_t)
             outputs.append(hx.unsqueeze(1))
 

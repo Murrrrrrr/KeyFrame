@@ -1,4 +1,3 @@
-# 文件路径: models/mlp_baseline.py
 import torch
 import torch.nn as nn
 from models.heads.event_head import EventHead
