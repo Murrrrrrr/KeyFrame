@@ -8,7 +8,7 @@ def normalize_signal(signal):
         return signal
     return (signal - min_val) / (max_val - min_val)
 
-def calculate_mzeni_prior(keypoints_3d, ankle_weight=0.5):
+def extract_physics_signal(keypoints_3d, mode='m_zeni', ankle_weight=0.5):
     """
     统一的 M-Zeni 物理先验特征提取器
     :param keypoints_3d: 形状为 (Frames, Joints, 3)
@@ -36,16 +36,20 @@ def calculate_mzeni_prior(keypoints_3d, ankle_weight=0.5):
                  ankle_weight * np.linalg.norm(r_ankle - pelvis, axis=1)
 
     zeni_signal = np.maximum(zeni_left, zeni_right)
-
-    # 2. 计算 M-Zeni 物理特征（双足空间欧式距离）
-    m_zeni_signal = np.linalg.norm(l_toe - r_toe, axis=1) + \
-                    np.linalg.norm(l_heel - r_heel, axis=1) + \
-                    ankle_weight * np.linalg.norm(l_ankle - r_ankle, axis=1)
-
-    # 3. 联合约束归一化融合
     norm_zeni = normalize_signal(zeni_signal)
-    norm_m_zeni = normalize_signal(m_zeni_signal)
-    combined_constraint_signal = norm_zeni * norm_m_zeni
 
-    # 返回形状 (Frames, 1) 的特征，并添加防下溢极小值
-    return combined_constraint_signal.reshape(-1, 1) + 1e-6
+    if mode == 'classic_zeni':
+        return norm_zeni.reshape(-1, 1) + 1e-6
+
+    elif mode == 'm_zeni':
+        m_zeni_signal = np.linalg.norm(l_toe - r_toe, axis=1) + \
+                        np.linalg.norm(l_heel - r_heel, axis=1) + \
+                        ankle_weight * np.linalg.norm(l_ankle - r_ankle, axis=1)
+
+        norm_m_zeni = normalize_signal(m_zeni_signal)
+
+        # 联合约束归一化融合 (逻辑与门控)
+        combined_constraint_signal = norm_zeni * norm_m_zeni
+        return combined_constraint_signal.reshape(-1, 1) + 1e-6
+    else:
+        raise ValueError(f"未知的物理特征模式: {mode}")
