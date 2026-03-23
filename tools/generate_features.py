@@ -3,7 +3,7 @@ import numpy as np
 import glob
 import json
 import yaml
-from utils.physics_utils import calculate_mzeni_prior
+from utils.physics_utils import extract_physics_signal
 
 def normalize_signal(signal):
     """ 将一维信号归一化到 0~1 之间 """
@@ -13,28 +13,26 @@ def normalize_signal(signal):
         return signal
     return (signal - min_val) / (max_val - min_val)
 
-def extract_67d_features(h36m_file_path,fps,ema_alpha,ankle_weight,selected_indices):
+def extract_67d_features(h36m_file_path,fps,ema_alpha,ankle_weight,selected_indices, use_normalization=False, extract_m_zeni=True):
     """
     填入软硬件协同特征提取逻辑：单目空间坐标 + M-Zeni规则 + 速度特征
     """
     # 读取 H36M 3D 骨架数据（Frame, Joints, 3）
     keypoints_3d = np.load(h36m_file_path)
     num_frames = keypoints_3d.shape[0]
-    pelvis_center = keypoints_3d[:, 0:1, :].copy()
-    keypoints_3d = keypoints_3d - pelvis_center
 
     # 硬件时间基准
     dt = 1.0 / fps # 视频帧率
 
     # 选取 11 个关键点构建 33 维空间特征 （必须包含 labels 中用到的 7 个关键点）
-    pose_11_joints = keypoints_3d[:, selected_indices, :] # (Frames, 11, 3)
+    pose_11_joints_abs = keypoints_3d[:, selected_indices, :] # (Frames, 11, 3)
 
     # 展开为 33 维空间坐标
-    spatial_features = pose_11_joints.reshape(num_frames, len(selected_indices) * 3)
+    spatial_features_abs = pose_11_joints_abs.reshape(num_frames, len(selected_indices) * 3)
 
     # 计算 33 维运动学速度特征 (一阶差分 + EMA 滤波， 对应 physics_priors.py)
-    vel = np.zeros_like(spatial_features)
-    vel[1:] = (spatial_features[1:] - spatial_features[:-1]) / dt
+    vel = np.zeros_like(spatial_features_abs)
+    vel[1:] = (spatial_features_abs[1:] - spatial_features_abs[:-1]) / dt
     vel[0] = vel[1] # 零阶保持器填补第一帧
 
     # EMA(指数移动平均) 抗混叠滤波
@@ -45,13 +43,23 @@ def extract_67d_features(h36m_file_path,fps,ema_alpha,ankle_weight,selected_indi
 
     velocity_features = smoothed_vel
 
+    # 执行空间特征的骨盆原点对齐与动态尺度归一化
+    pelvis_center = keypoints_3d[:, 0:1, :].copy()
+    keypoints_3d_norm = keypoints_3d - pelvis_center
+
+    if use_normalization:
+        # 动态尺度归一化：除以每一帧中离骨盆最远的关键点距离，将空间坐标严格限制在[-1, 1]附近
+        max_dist = np.linalg.norm(keypoints_3d_norm, axis=-1).max(axis=-1, keepdims=True)
+        max_dist = np.maximum(max_dist, 1e-6)  # 防止除以 0
+        keypoints_3d_norm = keypoints_3d_norm / np.expand_dims(max_dist, axis=-1)
+
     mzeni_signal = calculate_mzeni_prior(keypoints_3d, ankle_weight=ankle_weight)
     fused_features = np.concatenate([spatial_features, velocity_features, mzeni_signal], axis=-1)
     fused_features = fused_features.astype(np.float32)
 
-    if np.isnan(fused_features).any():
-        print(f"[硬件报警] 提取的特征中包含 NaN (文件：{h36m_file_path})，已自动补0。")
-        fused_features = np.nan_to_num(fused_features)
+    if np.isnan(fused_features).all():
+        print(f"[硬件报警] 提取的特征中包含 NaN 或者 Inf (文件：{h36m_file_path})，已执行截断清洗。")
+        fused_features = np.nan_to_num(fused_features, nan=0.0, posinf=10000.0, neginf=-10000.0)
 
     return fused_features
 

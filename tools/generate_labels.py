@@ -2,7 +2,7 @@ import os
 import numpy as np
 import glob
 from scipy.signal import find_peaks
-from utils.physics_utils import calculate_mzeni_prior
+from utils.physics_utils import extract_m_zeni
 
 def normalize_signal(signal):
     """将一维信号归一化到 0~1 之间，便于不同量纲的特征融合"""
@@ -46,11 +46,14 @@ def generate_labels_for_athlete_pose(dataset_root, output_root, splits):
                 keypoints_3d = np.load(h36m_path)
                 num_frames = keypoints_3d.shape[0]
 
-                combined_constraint_signal = calculate_mzeni_prior(keypoints_3d, ankle_weight=0.5) # 构建最终的联合物理判据信号
-                signal_1d = combined_constraint_signal.flatten()
+                phase_clock_signal = extract_m_zeni(keypoints_3d, ankle_weight=0.5)
+                signal_1d = phase_clock_signal.flatten()
+
+                # 将代表右脚极值的波谷（-1）翻折成波峰（+1）
+                abs_signal_1d = np.abs(signal_1d)
 
                 # 寻峰与生成标签
-                peaks, properties = find_peaks(signal_1d, distance=15, prominence=0.05)
+                peaks, properties = find_peaks(abs_signal_1d, distance=15, prominence=0.05)
 
                 # 生成对应的独热编码标签
                 labels = np.zeros((num_frames, 1), dtype=np.float32)
