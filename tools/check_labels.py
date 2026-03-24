@@ -10,9 +10,16 @@ def check_label_file(label_path, output_dir, show_plot=False):
 
     labels = np.load(label_path)
     num_frames = labels.shape[0]
+    num_channels = labels.shape[1] if len(labels.shape) > 1 else 1
+    if num_channels != 4:
+        print(f"警告：期望的标签通道数为 4，但实际为 {num_channels} ! 请检查数据生成脚本！")
 
-    # 找到所有标签为 1（关键帧）的帧索引
-    keyframe_indices = np.where(labels == 1.0)[0]
+    # 提取4个通道
+    l_hs_idx = np.where(labels[:, 0] == 1.0)[0]
+    l_to_idx = np.where(labels[:, 1] == 1.0)[0]
+    r_hs_idx = np.where(labels[:, 2] == 1.0)[0]
+    r_to_idx = np.where(labels[:, 3] == 1.0)[0]
+
 
     # 获取上一级目录名，方便在报告中区分
     folder_name = os.path.basename(os.path.dirname(label_path))
@@ -22,25 +29,40 @@ def check_label_file(label_path, output_dir, show_plot=False):
     print(f"=== 标签文件检查报告: [{folder_name}] ===")
     print(f"文件路径: {label_path}")
     print(f"总帧数: {num_frames}")
-    print(f"提取出的关键帧总数: {len(keyframe_indices)}")
-    if len(keyframe_indices) > 0:
-        print(f"前 20 个关键帧的帧号: {keyframe_indices[:20]}")
-
-    # 计算关键帧之间的平均间隔
-    if len(keyframe_indices) > 1:
-        intervals = np.diff(keyframe_indices)
-        print(f"关键帧平均间隔: {np.mean(intervals):.2f} 帧 (在 120fps 下约 {np.mean(intervals) / 120:.2f} 秒/步)")
+    print(f"提取出事件总数: {len(l_hs_idx) + len(l_to_idx) + len(r_hs_idx) + len(r_to_idx)}")
+    print(f"  - L_HS (左脚触地): {len(l_hs_idx)} 次 | 前5次帧号: {l_hs_idx[:5]}")
+    print(f"  - L_TO (左脚离地): {len(l_to_idx)} 次 | 前5次帧号: {l_to_idx[:5]}")
+    print(f"  - R_HS (右脚触地): {len(r_hs_idx)} 次 | 前5次帧号: {r_hs_idx[:5]}")
+    print(f"  - R_TO (右脚离地): {len(r_to_idx)} 次 | 前5次帧号: {r_to_idx[:5]}")
+    if len(l_hs_idx) > 1 and len(r_hs_idx) > 1:
+        l_stride = np.mean(np.diff(l_hs_idx))
+        r_stride = np.mean(np.diff(r_hs_idx))
+        print(f"步态周期 (Stride): 左脚平均 {l_stride:.1f} 帧，右脚平均 {r_stride:.1f} 帧")
     print("=========================================\n")
 
     display_frames = min(500, num_frames)
-    plt.figure(figsize=(12, 4))
-    plt.plot(labels[:display_frames], color='green', label='Ground Truth (1=Keyframe)')
-    plt.title(f"Label Visualization (First {display_frames} frames) - Dataset: {folder_name}")
+    plt.figure(figsize=(12, 5))
+    def filter_display(indices):
+        """只保留需要展示的帧范围内的索引"""
+        return indices[indices < display_frames]
+
+    # 画 4 条参考虚线
+    for y in [1, 2, 3, 4]:
+        plt.axhline(y=y, color='gray', linestyle='--', alpha=0.3)
+
+    # 用不同的颜色和形状（散点/竖线）标记 4 种事件
+    plt.scatter(filter_display(l_hs_idx), [4]*len(filter_display(l_hs_idx)), color='blue', marker='v', s=100, label='Left HS (y=4)')
+    plt.scatter(filter_display(l_to_idx), [3]*len(filter_display(l_to_idx)), color='cyan', marker='^', s=100, label='Left TO (y=3)')
+    plt.scatter(filter_display(r_hs_idx), [2]*len(filter_display(r_hs_idx)), color='red', marker='v', s=100, label='Right HS (y=2)')
+    plt.scatter(filter_display(r_to_idx), [1]*len(filter_display(r_to_idx)), color='magenta', marker='^', s=100, label='Right TO (y=1)')
+
+    plt.title(f"4-Channel Gait Events Visualization (First {display_frames} frames) - Dataset: {folder_name}")
     plt.xlabel("Frame Index")
-    plt.ylabel("Label Value")
-    plt.yticks([0, 1])
-    plt.legend()
-    plt.grid(True, alpha=0.3)
+    plt.ylabel("Event Type")
+    # 把 Y 轴的数字替换成好懂的文字标签
+    plt.yticks([1, 2, 3, 4], ['Right TO', 'Right HS', 'Left TO', 'Left HS'])
+    plt.legend(loc = 'upper right')
+    plt.grid(True, alpha=0.2, axis='x')
     plt.tight_layout()
     save_filename = f"{split_name}_{folder_name}_{file_basename}.png"
     save_path = os.path.join(output_dir, save_filename)

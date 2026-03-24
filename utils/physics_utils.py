@@ -1,11 +1,15 @@
+from os import name
+
 import numpy as np
 import torch
 from scipy.signal import find_peaks
 
 # H36M 拓扑关键点
 PELVIS_IDX = 0
-R_ANKLE_IDX, R_HEEL_IDX, R_TOE_IDX = 3, 4, 5
-L_ANKLE_IDX, L_HEEL_IDX, L_TOE_IDX = 8, 9, 10
+R_ANKLE_IDX = 3
+L_ANKLE_IDX = 6
+R_HEEL_IDX, R_TOE_IDX = 4, 5
+L_HEEL_IDX, L_TOE_IDX = 9, 10
 
 def ema_lowpass_filter_tensor(signal, alpha=0.7):
     """
@@ -78,7 +82,7 @@ def project_forward_distance(foot_pos, pelvis_pos, forward_dir):
     relative = foot_pos - pelvis_pos
     return np.dot(relative, forward_dir)
 
-def extract_m_zeni(keypoint_3d, min_frames_between_steps=15, prominence=0.05, cross_limb_weight=0.5, tolerance=5):
+def extract_m_zeni(keypoint_3d, min_frames_between_steps=35, prominence=0.05, cross_limb_weight=0.5, tolerance=18):
     """
     基于 M-Zeni 物理规则提取跑姿关键帧 （剥离归一化，直接计算）
     只适配于 H36M 17关节骨架格式
@@ -97,77 +101,71 @@ def extract_m_zeni(keypoint_3d, min_frames_between_steps=15, prominence=0.05, cr
     pelvis_pos = keypoint_3d[:, PELVIS_IDX, :]
     l_ankle_pos = keypoint_3d[:, L_ANKLE_IDX, :]
     r_ankle_pos = keypoint_3d[:, R_ANKLE_IDX, :]
-    l_heel_pos = keypoint_3d[:, L_HEEL_IDX, :]
-    r_heel_pos = keypoint_3d[:, R_HEEL_IDX, :]
-    l_toe_pos = keypoint_3d[:, L_TOE_IDX, :]
-    r_toe_pos = keypoint_3d[:, R_TOE_IDX, :]
 
     # 估计前进方向
     forward_dir = estimate_forward_direction(pelvis_pos)
 
     # Zeni 距离
-    l_heel_dist = project_forward_distance(l_heel_pos, pelvis_pos, forward_dir)
-    r_heel_dist = project_forward_distance(r_heel_pos, pelvis_pos, forward_dir)
-
-    l_toe_dist = project_forward_distance(l_toe_pos, pelvis_pos, forward_dir)
-    r_toe_dist = project_forward_distance(r_toe_pos, pelvis_pos, forward_dir)
+    l_ankle_dist = project_forward_distance(l_ankle_pos, pelvis_pos, forward_dir)
+    r_ankle_dist = project_forward_distance(r_ankle_pos, pelvis_pos, forward_dir)
 
     # 寻找极值
     # HS 最大值
     l_hs, _ = find_peaks(
-        r_heel_dist,
+        l_ankle_dist,
         distance=min_frames_between_steps,
         prominence=prominence,
     )
     r_hs, _ = find_peaks(
-        l_heel_dist,
+        r_ankle_dist,
         distance=min_frames_between_steps,
         prominence=prominence,
     )
     # TO 最小值
     l_to, _ = find_peaks(
-        -l_toe_dist,
+        -l_ankle_dist,
         distance=min_frames_between_steps,
         prominence=prominence,
     )
     r_to, _ = find_peaks(
-        -r_toe_dist,
+        -r_ankle_dist,
         distance=min_frames_between_steps,
         prominence=prominence,
     )
 
     # m-zeni 创新足尖规则
     toe_distance = np.linalg.norm(
-        l_toe_pos - r_toe_pos,
+        l_ankle_pos - r_ankle_pos,
         axis=1
     )
 
+    toe_min_distance = max(1, min_frames_between_steps // 2)
     toe_max_peaks, _ = find_peaks(
         toe_distance,
-        distance=min_frames_between_steps,
+        distance=toe_min_distance,
         prominence=prominence * cross_limb_weight,
     )
-    def validate(peaks):
+    def validate(peaks, name="Event"):
         if len(peaks) == 0 or len(toe_max_peaks) == 0:
             return np.array([])
-
         valid = []
         for p in peaks:
             if np.any(np.abs(toe_max_peaks - p) <= tolerance):
                 valid.append(p)
-
+        print(f"[{name}] 验证前：{len(peaks)}帧，验证后：{len(valid)}帧")
         return np.array(valid, dtype=int)
 
-    l_hs = validate(l_hs)
-    r_hs = validate(r_hs)
-    l_to = validate(l_to)
-    r_to = validate(r_to)
-
-    left_extreme = np.sort(np.unique(np.concatenate([l_hs, l_to])))
-    right_extreme = np.sort(np.unique(np.concatenate([r_hs, r_to])))
+    l_hs = validate(l_hs,"Left_HS")
+    r_hs = validate(r_hs,"Right_HS")
+    l_to = validate(l_to,"Left_TO")
+    r_to = validate(r_to,"Right_TO")
 
     return {
-        "Left_Extreme": left_extreme,
-        "Right_Extreme": right_extreme,
+        "Left_HS": l_hs,
+        "Left_TO": l_to,
+        "Right_HS": r_hs,
+        "Right_TO": r_to,
         "Toe_Max": toe_max_peaks,
+        "raw_l_heel_dist": l_ankle_dist,
+        "raw_r_heel_dist": r_ankle_dist,
     }
