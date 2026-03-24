@@ -1,9 +1,40 @@
 import numpy as np
+import torch
+from scipy.signal import find_peaks
 
 # H36M 拓扑关键点
 PELVIS_IDX = 0
 R_ANKLE_IDX, R_HEEL_IDX, R_TOE_IDX = 3, 4, 5
 L_ANKLE_IDX, L_HEEL_IDX, L_TOE_IDX = 8, 9, 10
+
+def ema_lowpass_filter_tensor(signal, alpha=0.7):
+    """
+    一阶 EMA 低通滤波
+    用于消除单目相机的果冻效应毛刺和硬件时钟抖动
+    :param signal: [Batch, SeqLen, FeatureDim] 的张量
+    :param alpha: 滤波系数，越大越平滑但延迟越高
+    """
+    smoothed_signal = torch.zeros_like(signal)
+    smoothed_signal[:, 0, :] = signal[:, 0, :]
+    for t in range(1, signal.size(1)):
+        smoothed_signal[:, t, :] = alpha * signal[:, t, :] + (1 - alpha) * smoothed_signal[:, t - 1, :]
+    return smoothed_signal
+
+def compute_kinematics_derivative(spatial_features, dt_seq, min_dt=1e-4):
+    """
+    计算基于物理时间的运动学差分
+    :param spatial_features: 空间坐标特征 [Batch, SeqLen, Dim]
+    :param dt_seq: 物理时间间隔 [Batch, SeqLen, 1]
+    :param min_di: 防止硬件时钟断流导致除零的安全阈值
+    """
+    velocity = torch.zeros_like(spatial_features)
+    dt_safe = torch.clamp(dt_seq, min=min_dt)
+    # 前向差分计算
+    vel_diff = (spatial_features[:, 1:, :] - spatial_features[:, :-1, :]) / dt_safe[:, 1:, :]
+    velocity[:, 1:, :] = vel_diff
+    # 零阶保持器填补第一帧
+    velocity[:, 0, :]= velocity[:, 1, :]
+    return velocity
 
 def robust_normalize_phase(signal):
     """ 鲁棒相位归一化，映射到 [-1, 1] """
@@ -21,65 +52,122 @@ def robust_normalize_phase(signal):
     norm_signal = 2.0 * (signal_clipped - p_min) / (p_max - p_min) - 1.0
     return norm_signal
 
-
-def extract_m_zeni(keypoints_3d, ankle_weight=0.5):
+def estimate_forward_direction(pelvis_pos):
     """
-    提取 M-Zeni 多尺度一致性相位 (局部躯干参考 + 全局跨肢体关系)
+    根据骨盆轨迹估计运动前进方向
+    :param pelvis_pos:
+    :return:
     """
-    pelvis = keypoints_3d[:, PELVIS_IDX, :]
-    r_ankle, r_heel, r_toe = keypoints_3d[:, R_ANKLE_IDX, :], keypoints_3d[:, R_HEEL_IDX, :], keypoints_3d[
-        :, R_TOE_IDX, :]
-    l_ankle, l_heel, l_toe = keypoints_3d[:, L_ANKLE_IDX, :], keypoints_3d[:, L_HEEL_IDX, :], keypoints_3d[
-        :, L_TOE_IDX, :]
+    velocity = np.diff(pelvis_pos, axis=0)
+    forward = np.mean(velocity, axis=0)
+    norm = np.linalg.norm(forward)
+    if norm < 1e-6:
+        forward = np.array([1.0, 0.0, 0.0])
+    else:
+        forward = forward / norm
+    return forward
 
-    # 局部躯干参考相位
-    zeni_left = np.linalg.norm(l_heel - pelvis, axis=1) + np.linalg.norm(l_toe - pelvis,
-                                                                         axis=1) + ankle_weight * np.linalg.norm(
-        l_ankle - pelvis, axis=1)
-    zeni_right = np.linalg.norm(r_heel - pelvis, axis=1) + np.linalg.norm(r_toe - pelvis,
-                                                                          axis=1) + ankle_weight * np.linalg.norm(
-        r_ankle - pelvis, axis=1)
-    zeni_phase_clock = zeni_left - zeni_right
-
-    # 全局跨肢体协同规律 (ToeL - ToeR 的差分向量长度，本身就具有周期性)
-    m_zeni_distance = np.linalg.norm(l_toe - r_toe, axis=1) + \
-                      np.linalg.norm(l_heel - r_heel, axis=1) + \
-                      ankle_weight * np.linalg.norm(l_ankle - r_ankle, axis=1)
-
-    # 为了保持方向性（相位），我们让跨肢体距离带有正负号（跟随 zeni_phase_clock 的符号）
-    m_zeni_phase_clock = m_zeni_distance * np.sign(zeni_phase_clock)
-
-    # 物理一致性融合：放弃会导致梯度消失和波形尖锐的乘法，改用加权线性叠加
-    # 这样既能融合“单腿”和“双腿”的运动学规律，又能完美保持极限环流形的平滑性
-    fused_phase_clock = 0.5 * zeni_phase_clock + 0.5 * m_zeni_phase_clock
-
-    norm_fused_phase = robust_normalize_phase(fused_phase_clock)
-    return norm_fused_phase.reshape(-1, 1)
-
-def extract_classic_zeni(keypoints_3d, ankle_weight=0.5):
+def project_forward_distance(foot_pos, pelvis_pos, forward_dir):
     """
-    提取经典 Zeni 物理相位 (构建连续的差分时钟)
+    前进方向投影距离
+    :param foot_pos:
+    :param pelvis_pos:
+    :param forward_dir:
+    :return:
     """
-    pelvis = keypoints_3d[:, PELVIS_IDX, :]
-    r_ankle = keypoints_3d[:, R_ANKLE_IDX, :]
-    r_heel = keypoints_3d[:, R_HEEL_IDX, :]
-    r_toe = keypoints_3d[:, R_TOE_IDX, :]
+    relative = foot_pos - pelvis_pos
+    return np.dot(relative, forward_dir)
 
-    l_ankle = keypoints_3d[:, L_ANKLE_IDX, :]
-    l_heel = keypoints_3d[:, L_HEEL_IDX, :]
-    l_toe = keypoints_3d[:, L_TOE_IDX, :]
+def extract_m_zeni(keypoint_3d, min_frames_between_steps=15, prominence=0.05, cross_limb_weight=0.5, tolerance=5):
+    """
+    基于 M-Zeni 物理规则提取跑姿关键帧 （剥离归一化，直接计算）
+    只适配于 H36M 17关节骨架格式
+    :param keypoint_3d: 形状为 (Frames, Joints, 3) 的 3D 骨架坐标。
+    :param min_frames_between_steps: 寻峰的最小帧间隔（控制容差）
+    :param prominence: 寻峰的最小突起度， 过滤微小抖动噪声
+    :param cross_limb_weight: 交叉肢体权重，用于缩放距离特征
+    :return:
+        dict: 包含 “Left_Extreme” 和 "Right_Extreme" 的字典，值为帧索引数组。
+    """
+    frames = keypoint_3d.shape[0]
+    if frames == 0:
+        return {}
 
-    # 分别计算左腿和右腿的伸展程度
-    zeni_left = np.linalg.norm(l_heel - pelvis, axis=1) + \
-                np.linalg.norm(l_toe - pelvis, axis=1) + \
-                ankle_weight * np.linalg.norm(l_ankle - pelvis, axis=1)
+    # 提取骨盆和左右脚踝的原始三维坐标
+    pelvis_pos = keypoint_3d[:, PELVIS_IDX, :]
+    l_ankle_pos = keypoint_3d[:, L_ANKLE_IDX, :]
+    r_ankle_pos = keypoint_3d[:, R_ANKLE_IDX, :]
+    l_heel_pos = keypoint_3d[:, L_HEEL_IDX, :]
+    r_heel_pos = keypoint_3d[:, R_HEEL_IDX, :]
+    l_toe_pos = keypoint_3d[:, L_TOE_IDX, :]
+    r_toe_pos = keypoint_3d[:, R_TOE_IDX, :]
 
-    zeni_right = np.linalg.norm(r_heel - pelvis, axis=1) + \
-                 np.linalg.norm(r_toe - pelvis, axis=1) + \
-                 ankle_weight * np.linalg.norm(r_ankle - pelvis, axis=1)
+    # 估计前进方向
+    forward_dir = estimate_forward_direction(pelvis_pos)
 
-    # 生成一个在正负之间振荡的波形，正数代表左腿在前，负数代表右腿在前
-    zeni_phase_clock = zeni_left - zeni_right
+    # Zeni 距离
+    l_heel_dist = project_forward_distance(l_heel_pos, pelvis_pos, forward_dir)
+    r_heel_dist = project_forward_distance(r_heel_pos, pelvis_pos, forward_dir)
 
-    norm_zeni_phase = robust_normalize_phase(zeni_phase_clock)
-    return norm_zeni_phase.reshape(-1, 1)
+    l_toe_dist = project_forward_distance(l_toe_pos, pelvis_pos, forward_dir)
+    r_toe_dist = project_forward_distance(r_toe_pos, pelvis_pos, forward_dir)
+
+    # 寻找极值
+    # HS 最大值
+    l_hs, _ = find_peaks(
+        r_heel_dist,
+        distance=min_frames_between_steps,
+        prominence=prominence,
+    )
+    r_hs, _ = find_peaks(
+        l_heel_dist,
+        distance=min_frames_between_steps,
+        prominence=prominence,
+    )
+    # TO 最小值
+    l_to, _ = find_peaks(
+        -l_toe_dist,
+        distance=min_frames_between_steps,
+        prominence=prominence,
+    )
+    r_to, _ = find_peaks(
+        -r_toe_dist,
+        distance=min_frames_between_steps,
+        prominence=prominence,
+    )
+
+    # m-zeni 创新足尖规则
+    toe_distance = np.linalg.norm(
+        l_toe_pos - r_toe_pos,
+        axis=1
+    )
+
+    toe_max_peaks, _ = find_peaks(
+        toe_distance,
+        distance=min_frames_between_steps,
+        prominence=prominence * cross_limb_weight,
+    )
+    def validate(peaks):
+        if len(peaks) == 0 or len(toe_max_peaks) == 0:
+            return np.array([])
+
+        valid = []
+        for p in peaks:
+            if np.any(np.abs(toe_max_peaks - p) <= tolerance):
+                valid.append(p)
+
+        return np.array(valid, dtype=int)
+
+    l_hs = validate(l_hs)
+    r_hs = validate(r_hs)
+    l_to = validate(l_to)
+    r_to = validate(r_to)
+
+    left_extreme = np.sort(np.unique(np.concatenate([l_hs, l_to])))
+    right_extreme = np.sort(np.unique(np.concatenate([r_hs, r_to])))
+
+    return {
+        "Left_Extreme": left_extreme,
+        "Right_Extreme": right_extreme,
+        "Toe_Max": toe_max_peaks,
+    }
