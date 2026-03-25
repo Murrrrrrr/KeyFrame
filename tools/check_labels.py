@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import glob
+from scipy.signal import find_peaks
 
 def check_label_file(label_path, output_dir, show_plot=False):
     if not os.path.exists(label_path):
@@ -15,11 +16,10 @@ def check_label_file(label_path, output_dir, show_plot=False):
         print(f"警告：期望的标签通道数为 4，但实际为 {num_channels} ! 请检查数据生成脚本！")
 
     # 提取4个通道
-    l_hs_idx = np.where(labels[:, 0] == 1.0)[0]
-    l_to_idx = np.where(labels[:, 1] == 1.0)[0]
-    r_hs_idx = np.where(labels[:, 2] == 1.0)[0]
-    r_to_idx = np.where(labels[:, 3] == 1.0)[0]
-
+    l_hs_idx, _ = find_peaks(labels[:, 0], height=0.5)
+    l_to_idx, _ = find_peaks(labels[:, 1], height=0.5)
+    r_hs_idx, _ = find_peaks(labels[:, 2], height=0.5)
+    r_to_idx, _ = find_peaks(labels[:, 3], height=0.5)
 
     # 获取上一级目录名，方便在报告中区分
     folder_name = os.path.basename(os.path.dirname(label_path))
@@ -46,24 +46,36 @@ def check_label_file(label_path, output_dir, show_plot=False):
         """只保留需要展示的帧范围内的索引"""
         return indices[indices < display_frames]
 
+    frames_x = np.arange(display_frames)
+
     # 画 4 条参考虚线
     for y in [1, 2, 3, 4]:
         plt.axhline(y=y, color='gray', linestyle='--', alpha=0.3)
 
-    # 用不同的颜色和形状（散点/竖线）标记 4 种事件
-    plt.scatter(filter_display(l_hs_idx), [4]*len(filter_display(l_hs_idx)), color='blue', marker='v', s=100, label='Left HS (y=4)')
-    plt.scatter(filter_display(l_to_idx), [3]*len(filter_display(l_to_idx)), color='cyan', marker='^', s=100, label='Left TO (y=3)')
-    plt.scatter(filter_display(r_hs_idx), [2]*len(filter_display(r_hs_idx)), color='red', marker='v', s=100, label='Right HS (y=2)')
-    plt.scatter(filter_display(r_to_idx), [1]*len(filter_display(r_to_idx)), color='magenta', marker='^', s=100, label='Right TO (y=1)')
+        # 1. 绘制高斯分布连续曲线 (Line)
+        plt.plot(frames_x, labels[:display_frames, 0] + 4, color='blue', alpha=0.7)
+        plt.plot(frames_x, labels[:display_frames, 1] + 3, color='cyan', alpha=0.7)
+        plt.plot(frames_x, labels[:display_frames, 2] + 2, color='red', alpha=0.7)
+        plt.plot(frames_x, labels[:display_frames, 3] + 1, color='magenta', alpha=0.7)
 
-    plt.title(f"4-Channel Gait Events Visualization (First {display_frames} frames) - Dataset: {folder_name}")
-    plt.xlabel("Frame Index")
-    plt.ylabel("Event Type")
-    # 把 Y 轴的数字替换成好懂的文字标签
-    plt.yticks([1, 2, 3, 4], ['Right TO', 'Right HS', 'Left TO', 'Left HS'])
-    plt.legend(loc = 'upper right')
-    plt.grid(True, alpha=0.2, axis='x')
-    plt.tight_layout()
+        # 2. 在峰顶绘制散点 (Scatter) 以示强调
+        # 取出落在展示区间内的峰值帧，计算它们在图上的 Y 坐标 (概率最大值 + 偏移量)
+        plt.scatter(filter_display(l_hs_idx), labels[filter_display(l_hs_idx), 0] + 4, color='blue', marker='v', s=60,
+                    label='Left HS (Base=4)')
+        plt.scatter(filter_display(l_to_idx), labels[filter_display(l_to_idx), 1] + 3, color='cyan', marker='^', s=60,
+                    label='Left TO (Base=3)')
+        plt.scatter(filter_display(r_hs_idx), labels[filter_display(r_hs_idx), 2] + 2, color='red', marker='v', s=60,
+                    label='Right HS (Base=2)')
+        plt.scatter(filter_display(r_to_idx), labels[filter_display(r_to_idx), 3] + 1, color='magenta', marker='^',
+                    s=60, label='Right TO (Base=1)')
+
+        plt.title(f"4-Channel Gaussian Soft Labels (First {display_frames} frames) - Dataset: {folder_name}")
+        plt.xlabel("Frame Index")
+        plt.ylabel("Event Probability (Stacked)")
+        plt.yticks([1, 2, 3, 4], ['Right TO', 'Right HS', 'Left TO', 'Left HS'])
+        plt.legend(loc='upper right')
+        plt.grid(True, alpha=0.2, axis='x')
+        plt.tight_layout()
     save_filename = f"{split_name}_{folder_name}_{file_basename}.png"
     save_path = os.path.join(output_dir, save_filename)
     plt.savefig(save_path, dpi=300, bbox_inches='tight')

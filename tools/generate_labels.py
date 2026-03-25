@@ -15,8 +15,7 @@ def debug_plot_zeni_signal(l_heel_dist, l_hs, r_heel_dist, r_hs, video_name):
 
     # 标记最终确定的触地点
     plt.plot(l_hs, l_heel_dist[l_hs], "x", color='cyan', markersize=12, markeredgewidth=3, label='Left HS (Detected)')
-    plt.plot(r_hs, r_heel_dist[r_hs], "x", color='magenta', markersize=12, markeredgewidth=3,
-             label='Right HS (Detected)')
+    plt.plot(r_hs, r_heel_dist[r_hs], "x", color='magenta', markersize=12, markeredgewidth=3,label='Right HS (Detected)')
 
     plt.title(f"Zeni Projection Signal - {video_name}")
     plt.xlabel("Frames")
@@ -26,6 +25,31 @@ def debug_plot_zeni_signal(l_heel_dist, l_hs, r_heel_dist, r_hs, video_name):
 
     print(">>> 正在显示 Debug 波形图。请查看弹出的窗口。关闭窗口后程序将继续运行...")
     plt.show()
+
+def apply_gaussian_label(labels, channel_idx, event_frames, num_frames, sigma=2.0):
+    """
+    在指定的通道上，以各个事件帧 (t0) 为中心，生成 1D 高斯概率分布
+    :param labels:  shape [T, 4] 的标签矩阵
+    :param channel_idx: 当前写入的通道 (0~3)
+    :param event_frames: 检测到的峰值帧索引数组
+    :param num_frames: 序列总帧数 T
+    :param sigma: 高斯分布的标准差，控制标签的“宽度”
+    """
+    for t0 in event_frames:
+        # 高斯分布在 3 * sigma 之外的值非常小，所以只截取这个窗口
+        radius = int(np.ceil(3 * sigma))
+        start = max(0,t0 - radius)
+        end = min(num_frames, t0 + radius + 1)
+
+        # 计算窗口内的时间步
+        t = np.arange(start, end)
+
+        # 核心公式：y_t = exp(-(t - t0)^2 / (2 * sigma^2))
+        gaussian = np.exp(-((t-t0) ** 2) / (2 * sigma ** 2))
+
+        # 使用了 np.maximum 而不是简单的加减法
+        # 这样即使两个步态事件离得异常近，最高的概率也依然限制在 1.0 以内
+        labels[start:end, channel_idx] = np.maximum(labels[start:end, channel_idx], gaussian  )
 
 def generate_labels_for_athlete_pose(dataset_root, output_root, splits):
     """
@@ -85,11 +109,16 @@ def generate_labels_for_athlete_pose(dataset_root, output_root, splits):
                 valid_r_hs = get_valid_frames(keyframes_dict["Right_HS"])
                 valid_r_to = get_valid_frames(keyframes_dict["Right_TO"])
 
-                # 赋值 One-hot 标签
-                if len(valid_l_hs) > 0: labels[valid_l_hs, 0] = 1.0
-                if len(valid_l_to) > 0: labels[valid_l_to, 1] = 1.0
-                if len(valid_r_hs) > 0: labels[valid_r_hs, 2] = 1.0
-                if len(valid_r_to) > 0: labels[valid_r_to, 3] = 1.0
+                # sigma 值设定建议：
+                # 如果视频是 120 FPS，建议 sigma=3.0 ~ 4.0 之间 （覆盖前后大概10帧）
+                # 如果你的视频是 50~60 FPS，建议 sigma=1.5 ~ 2.0 (覆盖大概前后3~6帧)
+                # 如果视频是 30 FPS，建议 sigma=0.5 ~ 1.5 (覆盖前后大概1~3帧)
+                SIGMA_VAL = 3.5
+
+                apply_gaussian_label(labels, 0, valid_l_hs, num_frames, sigma=SIGMA_VAL)
+                apply_gaussian_label(labels, 1, valid_l_to, num_frames, sigma=SIGMA_VAL)
+                apply_gaussian_label(labels, 2, valid_r_hs, num_frames, sigma=SIGMA_VAL)
+                apply_gaussian_label(labels, 3, valid_r_to, num_frames, sigma=SIGMA_VAL)
 
                 total_events = len(valid_l_hs) + len(valid_l_to) + len(valid_r_hs) + len(valid_r_to)
 
