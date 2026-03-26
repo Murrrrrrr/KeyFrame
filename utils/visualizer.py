@@ -66,7 +66,7 @@ def main():
 
     # 提取特征进行可视化
     # 在67维特征中 ，索引66是 M-Zeni 物理特征
-    mzeni_feature = x_tensor[:, 66].numpy()
+    mzeni_feature = x_tensor[:, 66 ].numpy()
 
     # 归一化 M-Zeni 以便在同一张图上展示（将其缩放到了 0~1 之间）
     mzeni_norm = (mzeni_feature - np.min(mzeni_feature)) / (np.max(mzeni_feature) - np.min(mzeni_feature) + 1e-6)
