@@ -1,13 +1,14 @@
+""" 训练评价指标 """
 import numpy as np
 import torch
 import torch.nn.functional as F
 from typing import List, Tuple, Union, Dict
 
-class SpareseKeyframeMetrics:
+class SparseKeyframeMetrics:
     """
     稀疏关键帧评估器
     """
-    def __init__(self, tolerance: int=3, threshold: float=0.5, min_step_frames: int=5, from_logits: bool=False):
+    def __init__(self, tolerance: int=3, threshold: float=0.5, min_step_frames: int=5, from_logits: bool=False, num_classes: int=5):
         """
         :param tolerance: 容差匹配窗口（默认正负3帧，即 delta_t 容忍度）
         :param threshold: 激活概率的绝对阈值
@@ -17,6 +18,7 @@ class SpareseKeyframeMetrics:
         self.threshold = threshold
         self.min_step_frames = min_step_frames
         self.from_logits = from_logits
+        self.num_classes = num_classes
         self.reset()
 
     def reset(self):
@@ -38,54 +40,58 @@ class SpareseKeyframeMetrics:
         else:
             probs = logits_or_probs
 
-        probs = probs.squeeze(-1).view(targets.size(0), -1)  # [Batch, 64]
-        targets = targets.squeeze(-1).view(targets.size(0), -1)  # [Batch, 64]
+        # 转换前: [Batch, SeqLen, NumClasses]
+        # 转换后: [Batch, NumClasses, SeqLen]
+        probs = probs.transpose(1, 2)
+        targets = targets.transpose(1, 2)
 
-        # PyTorch Native 1D NMS (非极大值抑制) 提取波峰
-        # 利用 min_step_frames 作为 1D Pooling 的感受野，呼应 physics_loss 中的物理约束
-        kernel_size = self.min_step_frames + (1 if self.min_step_frames % 2 == 0 else 0)  # 确保感受野为奇数
+        # 确保感受野为奇数
+        kernel_size = self.min_step_frames + (1 if self.min_step_frames % 2 == 0 else 0)
         pad = kernel_size // 2
 
-        probs_unsqueeze = probs.unsqueeze(1)  # [Batch, 1, 64]
-
-        # 通过 MaxPool1d 滑动窗口寻找局部极值
-        max_vals = F.max_pool1d(probs_unsqueeze, kernel_size=kernel_size, stride=1, padding=pad)
-
-        # 截断由于 padding 可能导致的多余长度
+        # 核心逻辑 A：对预测概率 (Probs) 进行多通道 NMS 寻峰
+        max_vals = F.max_pool1d(probs, kernel_size=kernel_size, stride=1, padding=pad)
         if max_vals.shape[-1] != probs.shape[-1]:
             max_vals = max_vals[..., :probs.shape[-1]]
 
-        # 严格的波峰隔离与平台期单点提取机制
-        probs_squeeze = probs_unsqueeze.squeeze(1)
-        max_vals_squeeze = max_vals.squeeze(1)
-        # 基础条件：当前点必须等于感受野内的最大值，且超过硬件触发阈值
-        is_max = (probs_squeeze == max_vals_squeeze) & (probs_squeeze >= self.threshold)
-        # 构造时间轴左右错位张量，用于对比相邻帧的物理梯度
-        shifted_right = torch.cat([torch.zeros_like(probs_squeeze[:, :1]), probs_squeeze[:, :-1]], dim=1)
-        shifted_left = torch.cat([probs_squeeze[:, 1:], torch.zeros_like(probs_squeeze[:, -1:])], dim=1)
-        # 波峰判定应逻辑：
-        # 必须大于左边的一帧 (probs_squeeze > shifted_right) -> 寻找上升沿
-        # 必须大于或等于右边的一帧 (probs_squeeze >= shifted_left) -> 允许波峰持续两帧，但只取左侧边缘
-        # 如果模型输出一条纯平直线(例如全0.9)，由于它不大于左边的帧，这一整条直线都会被过滤掉
-        peak_mask = is_max & (probs_squeeze > shifted_right) & (probs_squeeze >= shifted_left)
-        # CPU/NumPy 离线贪心容差匹配
-        batch_size = probs.size(0)
-        target_mask = targets > 0.5
+        is_max = (probs == max_vals) & (probs >= self.threshold)
+        shifted_right = torch.cat([torch.zeros_like(probs[:, :, :1]), probs[:, :, :-1]], dim=-1)
+        shifted_left = torch.cat([probs[:, :, 1:], torch.zeros_like(probs[:, :, -1:])], dim=-1)
 
+        peak_mask = is_max & (probs > shifted_right) & (probs >= shifted_left)
+
+        # 核心逻辑 B：对真实高斯软标签 (Targets) 进行同等 NMS 寻峰
+        # 防止连续的 >0.5 概率导致 GT 帧数成倍增加
+        target_max_vals = F.max_pool1d(targets, kernel_size=kernel_size, stride=1, padding=pad)
+        if target_max_vals.shape[-1] != targets.shape[-1]:
+            target_max_vals = target_max_vals[..., :targets.shape[-1]]
+
+        # 注意这里 threshold 可以设低一点，只要它是局部极值即可
+        target_is_max = (targets == target_max_vals) & (targets >= 0.5)
+        target_shifted_right = torch.cat([torch.zeros_like(targets[:, :, :1]), targets[:, :, :-1]], dim=-1)
+        target_shifted_left = torch.cat([targets[:, :, 1:], torch.zeros_like(targets[:, :, -1:])], dim=-1)
+
+        target_peak_mask = target_is_max & (targets > target_shifted_right) & (targets >= target_shifted_left)
+
+        # 双重循环：在 Batch 和 Channel 维度上分别匹配
         batch_size = probs.size(0)
+        num_channels = probs.size(1)
+
         for i in range(batch_size):
-            # 在gpu 端找出True 的位置，再 .cpu().tolist()，数据量从 Batch*64 锐减到几个数字
-            pred_indices = torch.nonzero(peak_mask[i]).squeeze(-1).cpu().tolist()
-            gt_indices = torch.nonzero(target_mask[i]).squeeze(-1).cpu().tolist()
+            for c in range(num_channels):
+                # 提取当前 Batch、当前 Channel 下的波峰帧索引
+                pred_indices = torch.nonzero(peak_mask[i, c]).squeeze(-1).cpu().tolist()
+                gt_indices = torch.nonzero(target_peak_mask[i, c]).squeeze(-1).cpu().tolist()
 
-            # 兼容处理：如果只有一个极值点，torch.nonzero 返回的 list 可能是单个数字，转为list
-            if isinstance(pred_indices, int): pred_indices = [pred_indices]
-            if isinstance(gt_indices, int): gt_indices = [gt_indices]
+                # 兼容处理：确保是 list
+                if isinstance(pred_indices, int): pred_indices = [pred_indices]
+                if isinstance(gt_indices, int): gt_indices = [gt_indices]
 
-            tp, fp, fn = self._match_1d_greedy(pred_indices, gt_indices)
-            self.total_tp += tp
-            self.total_fp += fp
-            self.total_fn += fn
+                # 独立匹配当前通道
+                tp, fp, fn = self._match_1d_greedy(pred_indices, gt_indices)
+                self.total_tp += tp
+                self.total_fp += fp
+                self.total_fn += fn
 
     def _match_1d_greedy(self, pred_idx: List[int], gt_idx: List[int]) -> Tuple[int, int, int]:
         """
@@ -96,7 +102,6 @@ class SpareseKeyframeMetrics:
         matched_preds = set()
         matched_gts = set()
 
-        # 计算所有可能的 pred-gt 距离
         matches = []
         for p in pred_idx:
             for g in gt_idx:

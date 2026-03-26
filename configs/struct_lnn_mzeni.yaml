@@ -27,8 +27,7 @@ data:
 
   # 数据预处理与特征工程特定参数
   ema_alpha: 0.7
-  ankle_weight: 0.5
-  selected_indices: [0,1,2,3,4,5,6,7,8,9,10]
+  selected_indices: [0,1,2,3,4,5,6]
 
   # 硬件仿真参数
   simulate_jitter: true
@@ -39,8 +38,9 @@ data:
 model:
   backbone: "CfC" # 闭式连续时间神经网络单元
 
-  input_dim: 67 # 33维空间 + 1维 M-Zeni + 33维速度 = 67维
+  input_dim: 43 # 21维空间  + 21维速度 + 1维 M-Zeni= 43维
   hidden_size: 64 # 隐藏层与投影：映射至更高表达能力的隐藏语义空间
+  num_classes: 5
   num_layers: 2
   output_dim: 5 #任务解码头：回归为一维的任务输出（触地/离地 logits）
 
@@ -53,7 +53,7 @@ training:
   loss:
     bce_weight: 1.0 #基础二元交叉熵分类损失
     physics_penalty_weight: 1.0 # 基于 M-Zeni 的物理常识惩罚权重
-    pos_weight: 30.0
+    pos_weight: 60.0
     focal_gamma: 2.0
 
 evaluation:

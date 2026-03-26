@@ -3,7 +3,10 @@ import numpy as np
 import glob
 import json
 import yaml
-from utils.physics_utils import estimate_forward_direction, project_forward_distance, physics_aware_normalize
+import torch
+from utils.physics_utils import (estimate_forward_direction, project_forward_distance ,physics_aware_normalize,
+                                 PELVIS_IDX, L_ANKLE_IDX, R_ANKLE_IDX,
+                                 compute_kinematics_derivative, ema_lowpass_filter_tensor)
 
 def normalize_signal(signal):
     """ 将一维信号归一化到 0~1 之间 """
@@ -13,7 +16,7 @@ def normalize_signal(signal):
         return signal
     return (signal - min_val) / (max_val - min_val)
 
-def extract_67d_features(h36m_file_path,fps,ema_alpha,ankle_weight,selected_indices, use_normalization=False, extract_m_zeni=True):
+def extract_43d_features(h36m_file_path,fps,ema_alpha,selected_indices, use_normalization=False, extract_m_zeni=True):
     """
     填入软硬件协同特征提取逻辑：单目空间坐标 + M-Zeni规则 + 速度特征
     """
@@ -24,34 +27,32 @@ def extract_67d_features(h36m_file_path,fps,ema_alpha,ankle_weight,selected_indi
     # 硬件时间基准
     dt = 1.0 / fps # 视频帧率
 
-    # 选取 11 个关键点构建 33 维空间特征 （必须包含 labels 中用到的 7 个关键点）
-    pose_11_joints_abs = keypoints_3d[:, selected_indices, :] # (Frames, 11, 3)
+    # 选取 7 个关键点构建 21 维空间特征 （必须包含 labels 中用到的 3 个关键点）
+    pose_7_joints_abs = keypoints_3d[:, selected_indices, :] # (Frames, 11, 3)
 
     # 展开为 33 维空间坐标
-    spatial_features_abs = pose_11_joints_abs.reshape(num_frames, len(selected_indices) * 3)
+    spatial_features_abs = pose_7_joints_abs.reshape(num_frames, len(selected_indices) * 3)
 
-    # 计算 33 维运动学速度特征 (一阶差分 + EMA 滤波， 对应 physics_priors.py)
-    vel = np.zeros_like(spatial_features_abs)
-    vel[1:] = (spatial_features_abs[1:] - spatial_features_abs[:-1]) / dt
-    vel[0] = vel[1] # 零阶保持器填补第一帧
+    # 临时将 Numpy 转化为 [Batch, SeqLen, Dim] 的张量
+    spatial_tensor = torch.tensor(spatial_features_abs, dtype=torch.float32).unsqueeze(0)
+    dt_tensor = torch.full((1, num_frames, 1), dt, dtype=torch.float32)
+    # 计算运动学速度
+    vel_tensor = compute_kinematics_derivative(spatial_tensor, dt_tensor)
+    # EMA 抗混叠滤波
+    smoothed_vel_tensor = ema_lowpass_filter_tensor(vel_tensor, alpha=ema_alpha)
 
-    # EMA(指数移动平均) 抗混叠滤波
-    smoothed_vel = np.zeros_like(vel)
-    smoothed_vel[0] = vel[0]
-    for t in range(1, num_frames):
-        smoothed_vel[t] = ema_alpha * vel[t] + (1 - ema_alpha) * smoothed_vel[t - 1]
-
-    velocity_features = smoothed_vel
+    # 重新转回 NumPy 矩阵 [SeqLen, Dim]
+    velocity_features = smoothed_vel_tensor.squeeze(0).numpy()
 
     # 绝对的空间去中心化（保证平移不变性）
-    pelvis_center = keypoints_3d[:, 0:1, :].copy()
+    pelvis_center = keypoints_3d[:, PELVIS_IDX:PELVIS_IDX+1, :].copy()
     keypoints_3d_centered = keypoints_3d - pelvis_center
 
     # 提取连续的 1D M-Zeni 信号
     if extract_m_zeni:
-        pelvis_pos = keypoints_3d[:, 0, :]
-        l_ankle_pos = keypoints_3d[:, 6, :]
-        r_ankle_pos = keypoints_3d[:, 3, :]
+        pelvis_pos = keypoints_3d[:, PELVIS_IDX, :]
+        l_ankle_pos = keypoints_3d[:, L_ANKLE_IDX, :]
+        r_ankle_pos = keypoints_3d[:, R_ANKLE_IDX, :]
 
         # 估计全局前进方向（3，）
         forward_dir = estimate_forward_direction(pelvis_pos)
@@ -86,7 +87,7 @@ def extract_67d_features(h36m_file_path,fps,ema_alpha,ankle_weight,selected_indi
 
 def main():
     print("-"*50)
-    print(" 开始执行 67维 特征提取")
+    print(" 开始执行 43维 特征提取")
     print("-"*50)
 
     # 基础路径配置
@@ -101,8 +102,7 @@ def main():
     # 从data节点中解析配置字典
     FPS = config['data'].get("fps", 120)
     EMA_ALPHA = config['data'].get("ema_alpha", 0.7)
-    ANKLE_WEIGHT = config['data'].get("ankle_weight", 0.5)
-    SELECTED_INDICES = config['data'].get("selected_indices", [0,1,2,3,4,5,6,7,8,9,10])
+    SELECTED_INDICES = config['data'].get("selected_indices", [0,1,2,3,4,5,6])
     USE_NORM = config['data'].get("use_normalization", True)
     RAW_DATA_DIR = os.path.join(PROJECT_ROOT, "AthletePose3D", "data")
     OUTPUT_FEATURES_DIT = os.path.join(PROJECT_ROOT, "data", "processed_features")
@@ -134,11 +134,10 @@ def main():
         os.makedirs(target_save_dir, exist_ok=True)
 
         # 将解析出来的 YAML 参数动态传入函数
-        feature_matrix = extract_67d_features(
+        feature_matrix = extract_43d_features(
             h36m_file_path=h36m_file,
             fps=FPS,
             ema_alpha=EMA_ALPHA,
-            ankle_weight=ANKLE_WEIGHT,
             selected_indices=SELECTED_INDICES,
             use_normalization=USE_NORM,
         )

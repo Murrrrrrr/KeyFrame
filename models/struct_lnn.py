@@ -15,7 +15,7 @@ class StructLNN(nn.Module):
         super(StructLNN, self).__init__()
 
         # 从 config 字典传入，方便后续在 train.py 统一管理
-        if config is not None:
+        if config is not None and 'model' in config:
             model_cfg = config.get('model', {})
             input_dim = model_cfg.get('input_dim', input_dim)
             hidden_dim = model_cfg.get('hidden_dim', hidden_dim)

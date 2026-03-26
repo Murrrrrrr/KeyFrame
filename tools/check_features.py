@@ -24,11 +24,11 @@ def check_feature_file(feature_path, output_dir, show_plot=False):
     print(f"  - 特征维度数 (D): {num_channels}")
 
     # 2. 维度断言测试
-    if num_channels != 67:
-        print(f"  ❌ [致命错误] 期望维度是 67，但实际提取到了 {num_channels} 维！请检查 generate_features.py")
+    if num_channels != 43:
+        print(f"  ❌ [致命错误] 期望维度是 43，但实际提取到了 {num_channels} 维！请检查 generate_features.py")
         return False
     else:
-        print("  ✅ 维度检查通过 (33空间 + 33速度 + 1 M-Zeni = 67维)")
+        print("  ✅ 维度检查通过 (21空间 + 21速度 + 1 M-Zeni = 67维)")
 
     # 3. 脏数据断言测试
     if np.isnan(features).any() or np.isinf(features).any():
@@ -48,12 +48,9 @@ def check_feature_file(feature_path, output_dir, show_plot=False):
     print(f"  - 全局平均值: {global_mean:.4f} (期望在 0 附近)")
 
     if global_max > 10.0 or global_min < -10.0:
-        print("  ⚠️ [警告] 发现极端的游离值！可能是 3D 骨架估计出了严重的飞点，请看波形图确认。")
+        print(" ⚠️ [警告] 发现极端的游离值！可能是 3D 骨架估计出了严重的飞点，请看波形图确认。")
 
     # 5. 波形可视化 (抽查 3 个典型的物理通道)
-    # 通道 0: 某个空间坐标 (相对骨盆)
-    # 通道 33: 某个瞬时速度 (一阶导数)
-    # 通道 66: M-Zeni 连续物理信号 (我们的全局时钟)
     display_frames = min(300, num_frames)
     frames_x = np.arange(display_frames)
 
@@ -61,7 +58,7 @@ def check_feature_file(feature_path, output_dir, show_plot=False):
 
     # 5.1 画 M-Zeni 物理时钟 (最核心的信号)
     plt.subplot(3, 1, 1)
-    plt.plot(frames_x, features[:display_frames, 66], color='green', linewidth=2, label='Ch:66 (M-Zeni Signal)')
+    plt.plot(frames_x, features[:display_frames, 42], color='green', linewidth=2, label='Ch:42 (M-Zeni Signal)')
     plt.axhline(0, color='gray', linestyle='--', alpha=0.5)
     plt.title(f"Feature Waveform Inspection - {file_basename}")
     plt.ylabel("Norm Dist")
@@ -78,7 +75,7 @@ def check_feature_file(feature_path, output_dir, show_plot=False):
 
     # 5.3 画 速度特征
     plt.subplot(3, 1, 3)
-    plt.plot(frames_x, features[:display_frames, 33], color='red', alpha=0.8, label='Ch:33 (Velocity)')
+    plt.plot(frames_x, features[:display_frames, 21], color='red', alpha=0.8, label='Ch:21 (Velocity)')
     plt.axhline(0, color='gray', linestyle='--', alpha=0.5)
     plt.xlabel("Frame Index")
     plt.ylabel("Norm Vel")

@@ -1,3 +1,4 @@
+"""在线计算 feature """
 import torch
 import torch.nn as nn
 
@@ -11,7 +12,7 @@ class PhysicsPriorExtractor(nn.Module):
                  smooth_velocity=True,
                  toe_weight=0.5, ankle_weight=0.8):
         """
-        M-Zeni (骨盆质心 + 双踝联合约束)的 67 维特征提取
+        M-Zeni (骨盆质心 + 双踝联合约束)的 43 维特征提取
         :param pelvis_idx: 骨盆索引 - 经典 Zeni 算法参考系原点
         :param left_heel_idx, right_heel_idx: 足跟索引 - 用于捕捉 Heel Strike（HS）
         :param left_toe_idx, right_toe_idx: 足尖索引 - 用于捕捉 （TO）

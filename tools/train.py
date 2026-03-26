@@ -1,7 +1,5 @@
 import os
 import argparse
-from gc import enable
-
 import yaml
 import torch
 import torch.optim as optim
@@ -14,7 +12,7 @@ import multiprocessing
 from datasets.pose_dataset import PoseSequenceDataset
 from models.struct_lnn import StructLNN
 from models.physics_loss import StructLNNLoss
-from utils.metrics import SpareseKeyframeMetrics
+from utils.metrics import SparseKeyframeMetrics
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Struct-LNN 关键帧训练引擎")
@@ -68,7 +66,6 @@ def main():
     model = model.to(device)
 
     # 提取 Loss 配置
-    bce_weight = config['training'].get('loss', {}).get('bce_weight', 1.0)
     physics_weight = config['training'].get('loss', {}).get('physics_penalty_weight', 0.5)
     pos_weight = config['training'].get('loss', {}).get('pos_weight', 60.0)
     focal_gamma = config['training'].get('loss', {}).get('focal_gamma', 2.0)
@@ -105,12 +102,12 @@ def main():
 
     # 评估标尺
     tolerance = config['evaluation'].get('tolerance_windows', 3)
-    val_metrics = SpareseKeyframeMetrics(tolerance=tolerance,
+    val_metrics = SparseKeyframeMetrics(tolerance=tolerance,
                                          from_logits=True,
-                                         threshold=0.3)
+                                         threshold=0.3,
+                                        num_classes=5)
 
     # 训练主循环
-    epochs = config['training']['epochs']
     print(f"[Engine] 开始训练，总 Epochs: {epochs}")
 
     for epoch in range(start_epoch,epochs):
@@ -173,8 +170,8 @@ def main():
         avg_val_loss = val_loss_epoch / len(val_loader)
         current_lr = optimizer.param_groups[0]['lr']
 
-        print(f"--> Epoch {epoch + 1} Val Loss: {val_loss_epoch / len(val_loader):.4f} | "
-              f"Val F1: {current_f1:.4f} (P: {metrics_result['Precision']:.4f}, R: {metrics_result['Recall']:.4f})")
+        print(f"--> Epoch {epoch + 1} | LR: {current_lr:.2e} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+        print(f"    Val F1: {current_f1:.4f} (P: {metrics_result['Precision']:.4f}, R: {metrics_result['Recall']:.4f})")
 
         # 硬件级 Checkpoint 保存：仅保存表现最好（F1最高）的模型
         if current_f1 > best_f1:

@@ -1,3 +1,4 @@
+""" 将 feature.npy 文件打包成 PyTorch 的张量tensor"""
 import os
 import numpy as np
 import torch
@@ -115,7 +116,7 @@ class PoseSequenceDataset(Dataset):
         # (软硬协同模块) 开启时磨你边缘端 I2C/MIPI 接口读取传感器时的时钟抖动和总线阻塞丢帧
         if self.simulate_jitter:
             jitter = np.random.normal(0, self.base_dt * self.jitter_std, (self.seq_len, 1))
-            dt_array += np.clip(dt_array + jitter, a_min=1e-4, a_max=None)
+            dt_array = np.clip(dt_array + jitter, a_min=1e-4, a_max=None)
             drop_mask = np.random.rand(self.seq_len, 1) < self.drop_rate
             dt_array[drop_mask] *= np.random.randint(2, 4)
 

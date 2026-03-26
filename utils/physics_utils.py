@@ -7,10 +7,13 @@ from scipy.signal import find_peaks
 
 # H36M 拓扑关键点
 PELVIS_IDX = 0
+R_HIP_IDX = 1
+R_KNEE_IDX = 2
 R_ANKLE_IDX = 3
+L_HIP_IDX = 4
+L_KNEE_IDX = 5
 L_ANKLE_IDX = 6
-R_HEEL_IDX, R_TOE_IDX = 4, 5
-L_HEEL_IDX, L_TOE_IDX = 9, 10
+
 
 def ema_lowpass_filter_tensor(signal, alpha=0.7):
     """
