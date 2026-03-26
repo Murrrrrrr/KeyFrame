@@ -22,7 +22,7 @@ data:
   stride: 16
 
    # 骨架解析参数
-  use_normalization: false # 是否开启骨盆原点对齐与动态尺度归一化
+  use_normalization: true # 是否开启骨盆原点对齐与动态尺度归一化
   extract_m_zeni: true  # 是否计算 M-Zeni 物理特征
 
   # 数据预处理与特征工程特定参数
@@ -42,7 +42,7 @@ model:
   input_dim: 67 # 33维空间 + 1维 M-Zeni + 33维速度 = 67维
   hidden_size: 64 # 隐藏层与投影：映射至更高表达能力的隐藏语义空间
   num_layers: 2
-  output_dim: 1 #任务解码头：回归为一维的任务输出（触地/离地 logits）
+  output_dim: 5 #任务解码头：回归为一维的任务输出（触地/离地 logits）
 
 training:
   batch_size: 32

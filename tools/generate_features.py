@@ -3,7 +3,7 @@ import numpy as np
 import glob
 import json
 import yaml
-from utils.physics_utils import extract_physics_signal
+from utils.physics_utils import estimate_forward_direction, project_forward_distance, physics_aware_normalize
 
 def normalize_signal(signal):
     """ 将一维信号归一化到 0~1 之间 """
@@ -43,23 +43,44 @@ def extract_67d_features(h36m_file_path,fps,ema_alpha,ankle_weight,selected_indi
 
     velocity_features = smoothed_vel
 
-    # 执行空间特征的骨盆原点对齐与动态尺度归一化
+    # 绝对的空间去中心化（保证平移不变性）
     pelvis_center = keypoints_3d[:, 0:1, :].copy()
-    keypoints_3d_norm = keypoints_3d - pelvis_center
+    keypoints_3d_centered = keypoints_3d - pelvis_center
+
+    # 提取连续的 1D M-Zeni 信号
+    if extract_m_zeni:
+        pelvis_pos = keypoints_3d[:, 0, :]
+        l_ankle_pos = keypoints_3d[:, 6, :]
+        r_ankle_pos = keypoints_3d[:, 3, :]
+
+        # 估计全局前进方向（3，）
+        forward_dir = estimate_forward_direction(pelvis_pos)
+
+        # 计算左右脚踝在前进方向上的投影距离（Frames,）
+        dist_ankle_l = project_forward_distance(l_ankle_pos, pelvis_pos, forward_dir)
+        dist_ankle_r = project_forward_distance(r_ankle_pos, pelvis_pos, forward_dir)
+
+        mzeni_1d = dist_ankle_l - dist_ankle_r
+        mzeni_signal = np.expand_dims(mzeni_1d, axis=-1)
+    else:
+        mzeni_signal = np.zeros((num_frames, 1), dtype=np.float32)
+
+    # 提取我们真正需要的关键点节点集合 [Frames, Selected_Joints, 3]
+    selected_spatial = keypoints_3d_centered[:, selected_indices, :]
 
     if use_normalization:
-        # 动态尺度归一化：除以每一帧中离骨盆最远的关键点距离，将空间坐标严格限制在[-1, 1]附近
-        max_dist = np.linalg.norm(keypoints_3d_norm, axis=-1).max(axis=-1, keepdims=True)
-        max_dist = np.maximum(max_dist, 1e-6)  # 防止除以 0
-        keypoints_3d_norm = keypoints_3d_norm / np.expand_dims(max_dist, axis=-1)
+        spatial_features, velocity_features, mzeni_signal = physics_aware_normalize(
+            selected_spatial, velocity_features, mzeni_signal, p=98
+        )
+    else:
+        spatial_features = selected_spatial.reshape(num_frames, -1)
 
-    mzeni_signal = calculate_mzeni_prior(keypoints_3d, ankle_weight=ankle_weight)
     fused_features = np.concatenate([spatial_features, velocity_features, mzeni_signal], axis=-1)
     fused_features = fused_features.astype(np.float32)
 
-    if np.isnan(fused_features).all():
+    if np.isnan(fused_features).all() or np.isinf(fused_features).any():
         print(f"[硬件报警] 提取的特征中包含 NaN 或者 Inf (文件：{h36m_file_path})，已执行截断清洗。")
-        fused_features = np.nan_to_num(fused_features, nan=0.0, posinf=10000.0, neginf=-10000.0)
+        fused_features = np.nan_to_num(fused_features, nan=0.0, posinf=5.0, neginf=-5.0)
 
     return fused_features
 
@@ -119,6 +140,7 @@ def main():
             ema_alpha=EMA_ALPHA,
             ankle_weight=ANKLE_WEIGHT,
             selected_indices=SELECTED_INDICES,
+            use_normalization=USE_NORM,
         )
         base_filename = os.path.basename(h36m_file)
         feature_name = base_filename.replace("_h36m.npy", "_feature.npy")

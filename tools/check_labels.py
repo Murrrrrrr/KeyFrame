@@ -12,14 +12,15 @@ def check_label_file(label_path, output_dir, show_plot=False):
     labels = np.load(label_path)
     num_frames = labels.shape[0]
     num_channels = labels.shape[1] if len(labels.shape) > 1 else 1
-    if num_channels != 4:
-        print(f"警告：期望的标签通道数为 4，但实际为 {num_channels} ! 请检查数据生成脚本！")
+    if num_channels != 5:
+        print(f"警告：期望的标签通道数为 5，但实际为 {num_channels} ! 请检查数据生成脚本！")
 
     # 提取4个通道
     l_hs_idx, _ = find_peaks(labels[:, 0], height=0.5)
     l_to_idx, _ = find_peaks(labels[:, 1], height=0.5)
     r_hs_idx, _ = find_peaks(labels[:, 2], height=0.5)
     r_to_idx, _ = find_peaks(labels[:, 3], height=0.5)
+    toe_max_idx, _ = find_peaks(labels[:, 4], height=0.5)
 
     # 获取上一级目录名，方便在报告中区分
     folder_name = os.path.basename(os.path.dirname(label_path))
@@ -34,6 +35,7 @@ def check_label_file(label_path, output_dir, show_plot=False):
     print(f"  - L_TO (左脚离地): {len(l_to_idx)} 次 | 前5次帧号: {l_to_idx[:5]}")
     print(f"  - R_HS (右脚触地): {len(r_hs_idx)} 次 | 前5次帧号: {r_hs_idx[:5]}")
     print(f"  - R_TO (右脚离地): {len(r_to_idx)} 次 | 前5次帧号: {r_to_idx[:5]}")
+    print(f"  - Toe_Max (双足最大距离): {len(toe_max_idx)} 次 | 前5次帧号: {toe_max_idx[:5]}")
     if len(l_hs_idx) > 1 and len(r_hs_idx) > 1:
         l_stride = np.mean(np.diff(l_hs_idx))
         r_stride = np.mean(np.diff(r_hs_idx))
@@ -49,33 +51,35 @@ def check_label_file(label_path, output_dir, show_plot=False):
     frames_x = np.arange(display_frames)
 
     # 画 4 条参考虚线
-    for y in [1, 2, 3, 4]:
+    for y in [1, 2, 3, 4, 5]:
         plt.axhline(y=y, color='gray', linestyle='--', alpha=0.3)
 
-        # 1. 绘制高斯分布连续曲线 (Line)
-        plt.plot(frames_x, labels[:display_frames, 0] + 4, color='blue', alpha=0.7)
-        plt.plot(frames_x, labels[:display_frames, 1] + 3, color='cyan', alpha=0.7)
-        plt.plot(frames_x, labels[:display_frames, 2] + 2, color='red', alpha=0.7)
-        plt.plot(frames_x, labels[:display_frames, 3] + 1, color='magenta', alpha=0.7)
+    # 绘制高斯分布连续曲线
+    plt.plot(frames_x, labels[:display_frames, 0] + 5, color='blue', alpha=0.7)
+    plt.plot(frames_x, labels[:display_frames, 1] + 4, color='cyan', alpha=0.7)
+    plt.plot(frames_x, labels[:display_frames, 2] + 3, color='red', alpha=0.7)
+    plt.plot(frames_x, labels[:display_frames, 3] + 2, color='magenta', alpha=0.7)
+    plt.plot(frames_x, labels[:display_frames, 4] + 1, color='green', alpha=0.7)  # <- 新增：第 5 条曲线
 
-        # 2. 在峰顶绘制散点 (Scatter) 以示强调
-        # 取出落在展示区间内的峰值帧，计算它们在图上的 Y 坐标 (概率最大值 + 偏移量)
-        plt.scatter(filter_display(l_hs_idx), labels[filter_display(l_hs_idx), 0] + 4, color='blue', marker='v', s=60,
-                    label='Left HS (Base=4)')
-        plt.scatter(filter_display(l_to_idx), labels[filter_display(l_to_idx), 1] + 3, color='cyan', marker='^', s=60,
-                    label='Left TO (Base=3)')
-        plt.scatter(filter_display(r_hs_idx), labels[filter_display(r_hs_idx), 2] + 2, color='red', marker='v', s=60,
-                    label='Right HS (Base=2)')
-        plt.scatter(filter_display(r_to_idx), labels[filter_display(r_to_idx), 3] + 1, color='magenta', marker='^',
-                    s=60, label='Right TO (Base=1)')
+     # 在峰顶绘制散点
+    plt.scatter(filter_display(l_hs_idx), labels[filter_display(l_hs_idx), 0] + 5, color='blue', marker='v', s=60,
+                    label='L_HS')
+    plt.scatter(filter_display(l_to_idx), labels[filter_display(l_to_idx), 1] + 4, color='cyan', marker='^', s=60,
+                    label='L_TO')
+    plt.scatter(filter_display(r_hs_idx), labels[filter_display(r_hs_idx), 2] + 3, color='red', marker='v', s=60,
+                    label='R_HS')
+    plt.scatter(filter_display(r_to_idx), labels[filter_display(r_to_idx), 3] + 2, color='magenta', marker='^',
+                    s=60, label='R_TO')
+    plt.scatter(filter_display(toe_max_idx), labels[filter_display(toe_max_idx), 4] + 1, color='green', marker='*',
+                    s=80, label='Toe_Max')
 
-        plt.title(f"4-Channel Gaussian Soft Labels (First {display_frames} frames) - Dataset: {folder_name}")
-        plt.xlabel("Frame Index")
-        plt.ylabel("Event Probability (Stacked)")
-        plt.yticks([1, 2, 3, 4], ['Right TO', 'Right HS', 'Left TO', 'Left HS'])
-        plt.legend(loc='upper right')
-        plt.grid(True, alpha=0.2, axis='x')
-        plt.tight_layout()
+    plt.title(f"5-Channel Gaussian Soft Labels (First {display_frames} frames) - Dataset: {folder_name}")
+    plt.xlabel("Frame Index")
+    plt.ylabel("Event Probability (Stacked)")
+    plt.yticks([1, 2, 3, 4, 5], ['Toe Max','Right TO', 'Right HS', 'Left TO', 'Left HS'])
+    plt.legend(bbox_to_anchor=(1.01, 1), loc='upper left')
+    plt.grid(True, alpha=0.2, axis='x')
+    plt.tight_layout()
     save_filename = f"{split_name}_{folder_name}_{file_basename}.png"
     save_path = os.path.join(output_dir, save_filename)
     plt.savefig(save_path, dpi=300, bbox_inches='tight')

@@ -5,10 +5,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="c589d863-93df-4603-a45d-8b55be732b4f" name="更改" comment="">
+      <change afterPath="$PROJECT_DIR$/tools/check_features.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/features/physics_priors.py" beforeDir="false" afterPath="$PROJECT_DIR$/features/physics_priors.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/configs/struct_lnn_mzeni.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/configs/struct_lnn_mzeni.yaml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tools/check_labels.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/check_labels.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/generate_features.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/generate_features.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/tools/generate_labels.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/generate_labels.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/physics_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/physics_utils.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -25,6 +28,9 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="ProjectErrors" />
+  </component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 7
 }</component>
@@ -36,36 +42,38 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;ASKED_MARK_IGNORED_FILES_AS_EXCLUDED&quot;: &quot;true&quot;,
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;Python.check_cuda.executor&quot;: &quot;Run&quot;,
-    &quot;Python.check_labels.executor&quot;: &quot;Run&quot;,
-    &quot;Python.check_labels_generate.executor&quot;: &quot;Run&quot;,
-    &quot;Python.check_npy.executor&quot;: &quot;Run&quot;,
-    &quot;Python.evaluate.executor&quot;: &quot;Run&quot;,
-    &quot;Python.generate_features.executor&quot;: &quot;Run&quot;,
-    &quot;Python.generate_labels.executor&quot;: &quot;Run&quot;,
-    &quot;Python.pose_dataset.executor&quot;: &quot;Run&quot;,
-    &quot;Python.struct_lnn.executor&quot;: &quot;Run&quot;,
-    &quot;Python.test_dataset.executor&quot;: &quot;Run&quot;,
-    &quot;Python.train.executor&quot;: &quot;Run&quot;,
-    &quot;Python.visualizer.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ASKED_MARK_IGNORED_FILES_AS_EXCLUDED": "true",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python.check_cuda.executor": "Run",
+    "Python.check_features.executor": "Run",
+    "Python.check_labels.executor": "Run",
+    "Python.check_labels_generate.executor": "Run",
+    "Python.check_npy.executor": "Run",
+    "Python.evaluate.executor": "Run",
+    "Python.generate_features.executor": "Run",
+    "Python.generate_labels.executor": "Run",
+    "Python.pose_dataset.executor": "Run",
+    "Python.struct_lnn.executor": "Run",
+    "Python.test_dataset.executor": "Run",
+    "Python.train.executor": "Run",
+    "Python.visualizer.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "git-widget-placeholder": "master",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "run.code.analysis.last.selected.profile": "aDefault",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>

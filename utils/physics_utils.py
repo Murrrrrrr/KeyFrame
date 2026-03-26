@@ -1,3 +1,4 @@
+import math
 from os import name
 
 import numpy as np
@@ -39,22 +40,6 @@ def compute_kinematics_derivative(spatial_features, dt_seq, min_dt=1e-4):
     # 零阶保持器填补第一帧
     velocity[:, 0, :]= velocity[:, 1, :]
     return velocity
-
-def robust_normalize_phase(signal):
-    """ 鲁棒相位归一化，映射到 [-1, 1] """
-    # 使用分位数代替min/max，防止单帧飞点毁掉整个序列
-    p_min = np.percentile(signal, 2)
-    p_max = np.percentile(signal, 98)
-
-    # 截断奇异点
-    signal_clipped = np.clip(signal, p_min, p_max)
-
-    if p_max - p_min==0:
-        return signal_clipped - p_min
-
-    # 将信号映射到 [-1, 1]，0 代表双腿交汇的对称状态
-    norm_signal = 2.0 * (signal_clipped - p_min) / (p_max - p_min) - 1.0
-    return norm_signal
 
 def estimate_forward_direction(pelvis_pos):
     """
@@ -160,6 +145,16 @@ def extract_m_zeni(keypoint_3d, min_frames_between_steps=35, prominence=0.05, cr
     l_to = validate(l_to,"Left_TO")
     r_to = validate(r_to,"Right_TO")
 
+    events_dict = {
+        "Left_HS": l_hs,
+        "Left_TO": l_to,
+        "Right_HS": r_hs,
+        "Right_TO": r_to,
+        "Toe_Max": toe_max_peaks,
+    }
+
+    soft_labels = generate_gaussian_soft_labels(frames, events_dict, sigma=3.6)
+
     return {
         "Left_HS": l_hs,
         "Left_TO": l_to,
@@ -169,3 +164,78 @@ def extract_m_zeni(keypoint_3d, min_frames_between_steps=35, prominence=0.05, cr
         "raw_l_heel_dist": l_ankle_dist,
         "raw_r_heel_dist": r_ankle_dist,
     }
+
+def generate_gaussian_soft_labels(num_frame, event_dict, sigma=1.0):
+    """
+    将稀疏的帧索引转换为 (Num_Frames, 5) 的高斯软标签矩阵，用于 BCE Loss 多标签分类
+    :param num_frame: 视频序列的总帧数
+    :param event_dict: extract_m_zeni 返回的包含步态事件帧索引的字典
+    :param sigma: 高斯核标准差，sigma越大，软标签影响的相邻帧越宽。
+                  若 fps=120, sigma=1.0 大约影响前后 2-3 帧
+    :return: (num_frames, 5) 的 numpy 数组，值域在 [0, 1] 之间
+    """
+    # 初始化全零矩阵，形状为 (帧数，5个类别通道)
+    # 通道定义：0: Left_HS, 1:Left_TO, 2:Right_HS, 3:Right_TO, 4: Dist_Max (Toe_Max)
+    soft_labels = np.zeros((num_frame, 5), dtype=np.float32)
+    channel_map = {
+        "Left_HS": 0,
+        "Left_TO": 1,
+        "Right_HS": 2,
+        "Right_TO": 3,
+        "Toe_Max": 4,
+    }
+
+    for event_name, channel_idx in channel_map.items():
+        event_frames = event_dict.get(event_name, [])
+
+        for frame in event_frames:
+            if not (0 <= int(frame) < num_frame):
+                continue
+
+            # 在目标及其前后 3*sigma 的窗口内涂抹高斯分布
+            # 这样避免了遍历所有帧
+            window = int(np.ceil(3 * sigma))
+            start_idx = max(0, frame - window)
+            end_idx = min(num_frame, frame + window + 1)
+
+            for i in range(start_idx, end_idx):
+                # 计算高斯衰减值: exp(- (x - mu)^2 / (2 * sigma^2))
+                decay = math.exp(-((i - frame)**2) / (2 * (sigma ** 2)))
+                # 叠加概率 （如果两个同类事件靠的很近，取最大值，避免超过 1.0）
+                soft_labels[i, channel_idx] = max(soft_labels[i, channel_idx], decay)
+    return soft_labels
+
+def physics_aware_normalize(spatial_centered, velocity, mzeni, p=98):
+    """
+    物理感知的鲁棒最大绝对值归一化
+    针对跑姿数据的多模态特征设计，保留了物理动态和空间长宽比
+    :param sptial_centered: [Frames, Joints, 3] 去中心化后的相对 3D 坐标
+    :param velocity: [Frames, Feature_Dim] 瞬时速度特征
+    :param mzeni: [Frames, 1] M-Zeni 连续物理信号
+    :param p: 鲁棒分位数（默认为 98%），用于过滤单目相机的 3D 跟踪飞点噪声
+    :return: 归一化后并展平的 (norm_spatial, norm_vel, norm_mzeni)
+    """
+    import numpy as np
+    num_frames = spatial_centered.shape[0]
+
+    # 【空间特征】 等比例缩放
+    # 计算所有关节到骨盆的 3D 欧氏距离，找到分位数为 98% 的最大物理半径
+    distances = np.linalg.norm(spatial_centered, axis=-1)  # Shape: [Frames, Joints]
+    spatial_scale = np.percentile(distances, p)
+    spatial_scale = np.maximum(spatial_scale, 1e-6)  # 硬件除零保护
+
+    # 保持长宽比缩放并展平为 [Frames, Joints * 3]
+    spatial_flat = spatial_centered.reshape(num_frames, -1)
+    norm_spatial = spatial_flat / spatial_scale
+
+    # 【速度特征】 独立的鲁棒最大绝对值缩放
+    vel_scale = np.percentile(np.abs(velocity), p)
+    vel_scale = np.maximum(vel_scale, 1e-6)
+    norm_vel = velocity / vel_scale
+
+    # 【M-Zeni 信号】 独立的鲁棒最大绝对值缩放
+    mzeni_scale = np.percentile(np.abs(mzeni), p)
+    mzeni_scale = np.maximum(mzeni_scale, 1e-6)
+    norm_mzeni = mzeni / mzeni_scale
+
+    return norm_spatial, norm_vel, norm_mzeni

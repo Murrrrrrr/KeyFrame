@@ -97,8 +97,8 @@ def generate_labels_for_athlete_pose(dataset_root, output_root, splits):
                     has_plotted = True  # 画过一次就锁定，不再画了
 
                 # 初始化四通道矩阵
-                # 对应关系：0（Left_HS）,1（Left_TO）,2（Right_HS）,3（Right_TO）
-                labels = np.zeros((num_frames, 4), dtype=np.float32)
+                # 对应关系：0（Left_HS）,1（Left_TO）,2（Right_HS）,3（Right_TO） ,4(Toe_Max)
+                labels = np.zeros((num_frames, 5), dtype=np.float32)
 
                 # 安全提取索引并过滤掉超出帧数范围的无效索引
                 def get_valid_frames(frames_array):
@@ -108,6 +108,7 @@ def generate_labels_for_athlete_pose(dataset_root, output_root, splits):
                 valid_l_to = get_valid_frames(keyframes_dict["Left_TO"])
                 valid_r_hs = get_valid_frames(keyframes_dict["Right_HS"])
                 valid_r_to = get_valid_frames(keyframes_dict["Right_TO"])
+                valid_toe_max = get_valid_frames(keyframes_dict["Toe_Max"])
 
                 # sigma 值设定建议：
                 # 如果视频是 120 FPS，建议 sigma=3.0 ~ 4.0 之间 （覆盖前后大概10帧）
@@ -119,6 +120,7 @@ def generate_labels_for_athlete_pose(dataset_root, output_root, splits):
                 apply_gaussian_label(labels, 1, valid_l_to, num_frames, sigma=SIGMA_VAL)
                 apply_gaussian_label(labels, 2, valid_r_hs, num_frames, sigma=SIGMA_VAL)
                 apply_gaussian_label(labels, 3, valid_r_to, num_frames, sigma=SIGMA_VAL)
+                apply_gaussian_label(labels, 4, valid_toe_max, num_frames, sigma=SIGMA_VAL)
 
                 total_events = len(valid_l_hs) + len(valid_l_to) + len(valid_r_hs) + len(valid_r_to)
 
