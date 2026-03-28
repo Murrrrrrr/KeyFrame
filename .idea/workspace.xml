@@ -6,12 +6,9 @@
   <component name="ChangeListManager">
     <list default="true" id="c589d863-93df-4603-a45d-8b55be732b4f" name="更改" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/datasets/test_dataset.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/mlp_baseline.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tools/evaluate_mlp.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/tools/train_mlp.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/evaluate.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/evaluate.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/utils/metrics.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/metrics.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/utils/visualizer.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/visualizer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/visualizer_mlp.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -107,6 +104,16 @@
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/utils/metrics.py</url>
+          <option name="timeStamp" value="1" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/KeyFrame$check_labels.coverage" NAME="check_labels 覆盖结果" MODIFIED="1773301499699" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/tools" />
