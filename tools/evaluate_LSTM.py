@@ -12,6 +12,7 @@ from scipy.signal import find_peaks
 from datasets.pose_dataset import PoseSequenceDataset
 from models.struct_lnn import StructLNN
 from LSTM_models.baseline_lstm import BaselineLSTM
+from transformer_models.baseline_transformer import BaselineTransformer
 from utils.metrics import SparseKeyframeMetrics
 
 # 设置 plt 中文字体
@@ -311,6 +312,10 @@ def main():
     if backbone_type == "LSTM":
         print("[架构切换] 正在挂载 Baseline LSTM 进行测试集评估...")
         model = BaselineLSTM(config=config).to(device)
+    elif backbone_type == "Transformer":
+        print("[架构切换] 正在挂载 Baseline Transformer 进行测试集评估...")
+        model = BaselineTransformer(config=config).to(device)
+
     else:
         print("[架构切换] 正在挂载 Struct-LNN 进行测试集评估...")
         model = StructLNN(config=config).to(device)
@@ -401,7 +406,7 @@ def main():
     overall_mae = np.mean(all_errors) if len(all_errors) > 0 else 0.0
 
     print("\n" + "=" * 80)
-    print(f"                   LNN 测试集评估报告")
+    print(f"                  {backbone_type} 测试集评估报告")
     print("=" * 80)
 
     for c in classes:

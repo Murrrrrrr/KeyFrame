@@ -12,6 +12,7 @@ import multiprocessing
 from datasets.pose_dataset import PoseSequenceDataset
 from models.struct_lnn import StructLNN
 from LSTM_models.baseline_lstm import BaselineLSTM
+from transformer_models.baseline_transformer import BaselineTransformer
 from models.physics_loss import StructLNNLoss
 from utils.metrics import SparseKeyframeMetrics
 
@@ -68,6 +69,9 @@ def main():
     if backbone_type == "LSTM":
         print("[架构切换] 正在使用 Baseline LSTM 进行离散时间基线对比实验...")
         model = BaselineLSTM(config=config)
+    elif backbone_type == "Transformer":
+        print("[架构切换] 正在使用 Baseline Transformer 进行离散时间基线对比实验...")
+        model = BaselineTransformer(config=config)
     else:
         print("[架构切换] 正在使用 Struct-LNN (CfC) 进行连续时间动力学建模...")
         model = StructLNN(config=config)
@@ -192,7 +196,7 @@ def main():
                 'scheduler_state_dict': scheduler.state_dict(),
                 'best_f1': best_f1,
             }, save_path)
-            print(f"[Checkpoint] 最好硬件权重已保存 -> F1: {best_f1:.4f}")
+            print(f"[Checkpoint] 最好的权重已保存 -> F1: {best_f1:.4f}")
 
 if __name__ == "__main__":
     main()
