@@ -368,16 +368,40 @@ def main():
     else:
         weighted_p, weighted_r, weighted_f1 = 0.0, 0.0, 0.0
 
-    temporal_errors_dict = result.get('Temporal_Errors', {c: [] for c in range(5)})
+    all_probs_np = np.concatenate(all_probs_list, axis=0)
+    all_targets_np = np.concatenate(all_targets_list, axis=0)
     all_errors = []
+    # 遍历 5 个关键帧类别
     for c in range(5):
-        all_errors.extend(temporal_errors_dict.get(c, []))
+        # 分别找出真实标签和模型预测的极值点（峰值）
+        g_p, _ = find_peaks(all_targets_np[:, c], height=0.5)
+        p_p, _ = find_peaks(all_probs_np[:, c], height=0.3)
 
-    # MAE = 所有匹配上的关键帧的 |预测帧 - 真实帧| 的平均值
-    overall_mae = np.mean(np.abs(all_errors)) if len(all_errors) > 0 else 0.0
+        matched_pred = set()
+        # 对于每一个真实的物理关键帧
+        for gt_t in g_p:
+            best_dist = tolerance + 1
+            best_pred_idx = -1
+
+            # 在预测的关键帧中寻找距离最近的（且在容差窗口 W=3 内的）
+            for i, pr_t in enumerate(p_p):
+                if i in matched_pred: continue
+                dist = abs(gt_t - pr_t)
+                if dist <= tolerance:
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_pred_idx = i
+
+            # 如果成功匹配到了预测帧，记录它们之间的绝对时间误差
+            if best_pred_idx != -1:
+                matched_pred.add(best_pred_idx)
+                all_errors.append(best_dist)
+
+    # 计算平均绝对误差
+    overall_mae = np.mean(all_errors) if len(all_errors) > 0 else 0.0
 
     print("\n" + "=" * 80)
-    print(f"                   {backbone_type} 测试集评估报告")
+    print(f"                   LNN 测试集评估报告")
     print("=" * 80)
 
     for c in classes:
@@ -391,9 +415,9 @@ def main():
         f" {'MICRO AVG':<12} | {micro_p:<10.4f} | {micro_r:<10.4f} | {micro_f1:<10.4f} | {total_tp:<5} | {total_fp:<5} | {total_fn:<5}")
     print(
         f" {'WEIGHTED AVG':<12} | {weighted_p:<10.4f} | {weighted_r:<10.4f} | {weighted_f1:<10.4f} | {'-':<5} | {'-':<5} | {'-':<5}")
-
+    print("=" * 80)
     print(f" [时间定位精度] 平均绝对误差 (MAE): {overall_mae:.3f} 帧")
-    print(f"    (注：在 120fps 下，1帧 ≈ 8.3ms。MAE={overall_mae:.3f} 意味着误差约 {overall_mae * 8.33:.1f} 毫秒)")
+    print(f" (注：在 120fps 下，1帧 ≈ 8.33ms。MAE={overall_mae:.3f} 意味着误差约 {overall_mae * 8.33:.1f} 毫秒)")
     print("=" * 80)
 
     os.makedirs(args.save_dir, exist_ok=True)
@@ -427,7 +451,6 @@ def main():
         import traceback
         traceback.print_exc()
         print(f"[错误] 绘图发生异常: {e}")
-
 
 if __name__ == "__main__":
     main()
