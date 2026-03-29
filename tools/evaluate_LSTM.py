@@ -11,6 +11,7 @@ from scipy.signal import find_peaks
 
 from datasets.pose_dataset import PoseSequenceDataset
 from models.struct_lnn import StructLNN
+from LSTM_models.baseline_lstm import BaselineLSTM
 from utils.metrics import SparseKeyframeMetrics
 
 # 设置 plt 中文字体
@@ -266,7 +267,7 @@ def plot_timeline_visualization(sample_probs, sample_targets, classes, save_dir)
     plt.savefig(os.path.join(save_dir, "timeline_visualization.png"), bbox_inches='tight')
     plt.close(fig)
 
-def plot_event_interval_consistency(all_probs_np, all_targets_np, save_dir):
+def plot_event_interval_consistency(all_probs_np, all_targets_np, save_dir, model_name="Model"):
     """图表9：步态时间间隔一致性直方图"""
     l_hs_gt, _ = find_peaks(all_targets_np[:, 0], height=0.5)
     r_hs_gt, _ = find_peaks(all_targets_np[:, 2], height=0.5)
@@ -280,10 +281,10 @@ def plot_event_interval_consistency(all_probs_np, all_targets_np, save_dir):
     pred_intervals = [x for x in calc_intervals(np.sort(np.concatenate([l_hs_pred, r_hs_pred]))) if 10 < x < 100]
 
     fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
-    if len(gt_intervals) > 0: ax.hist(gt_intervals, bins=20, density=True, alpha=0.5, color='#2ca02c',
-                                      label='Ground Truth 步频物理间隔')
-    if len(pred_intervals) > 0: ax.hist(pred_intervals, bins=20, density=True, alpha=0.5, color='#1f77b4',
-                                        label='Struct-LNN 预测步频间隔')
+    if len(gt_intervals) > 0:
+        ax.hist(gt_intervals, bins=20, density=True, alpha=0.5, color='#2ca02c', label='Ground Truth 步频物理间隔')
+    if len(pred_intervals) > 0:
+        ax.hist(pred_intervals, bins=20, density=True, alpha=0.5, color='#1f77b4', label=f'{model_name} 预测步频间隔')
 
     ax.set_xlabel('事件间隔帧数 ($\Delta t$)', fontweight='bold')
     ax.set_ylabel('密度 (Density)', fontweight='bold')
@@ -305,7 +306,16 @@ def main():
     test_dataset = PoseSequenceDataset(config, split='test')
     test_loader = DataLoader(test_dataset, batch_size=config['training']['batch_size'], shuffle=False, num_workers=0)
 
-    model = StructLNN(config, num_classes=5).to(device)
+    backbone_type = config.get('model', {}).get('backbone', 'CfC')
+
+    if backbone_type == "LSTM":
+        print("[架构切换] 正在挂载 Baseline LSTM 进行测试集评估...")
+        model = BaselineLSTM(config=config).to(device)
+    else:
+        print("[架构切换] 正在挂载 Struct-LNN 进行测试集评估...")
+        model = StructLNN(config=config).to(device)
+
+    # 加载对应权重
     checkpoint = torch.load(args.checkpoint, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
@@ -318,7 +328,7 @@ def main():
     sample_probs, sample_targets = None, None
 
     with torch.no_grad():
-        for batch_data, batch_labels in tqdm(test_loader, desc="Testing"):
+        for batch_data, batch_labels in tqdm(test_loader, desc=f"Testing {backbone_type}"):
             batch_data = tuple(item.to(device, non_blocking=True) for item in batch_data)
             batch_labels = batch_labels.to(device, non_blocking=True)
 
@@ -367,10 +377,7 @@ def main():
     overall_mae = np.mean(np.abs(all_errors)) if len(all_errors) > 0 else 0.0
 
     print("\n" + "=" * 80)
-    print(f"                   LNN 测试集评估报告")
-    print("=" * 80)
-    print(f" [时间定位精度] 平均绝对误差 (MAE): {overall_mae:.3f} 帧")
-    print(f"    (注：在 120fps 下，1帧 ≈ 8.3ms。MAE={overall_mae:.3f} 意味着误差约 {overall_mae * 8.33:.1f} 毫秒)")
+    print(f"                   {backbone_type} 测试集评估报告")
     print("=" * 80)
 
     for c in classes:
@@ -384,25 +391,26 @@ def main():
         f" {'MICRO AVG':<12} | {micro_p:<10.4f} | {micro_r:<10.4f} | {micro_f1:<10.4f} | {total_tp:<5} | {total_fp:<5} | {total_fn:<5}")
     print(
         f" {'WEIGHTED AVG':<12} | {weighted_p:<10.4f} | {weighted_r:<10.4f} | {weighted_f1:<10.4f} | {'-':<5} | {'-':<5} | {'-':<5}")
+
+    print(f" [时间定位精度] 平均绝对误差 (MAE): {overall_mae:.3f} 帧")
+    print(f"    (注：在 120fps 下，1帧 ≈ 8.3ms。MAE={overall_mae:.3f} 意味着误差约 {overall_mae * 8.33:.1f} 毫秒)")
     print("=" * 80)
 
     os.makedirs(args.save_dir, exist_ok=True)
     print("\n[绘图模块] 正在生成 8 组顶级学术图表...")
     try:
         # [基础制图]
+        # (确保这里调用你上面的 plot_xxx 函数, 代码略去以免过长, 保持你原样即可)
         plot_multiclass_metrics_bar(result, classes, args.save_dir)
         plot_f1_radar_chart(result, classes, args.save_dir)
         plot_macro_event_outcomes_pie(macro, args.save_dir)
 
-        # [处理全量数据]
         all_probs_np = np.concatenate(all_probs_list, axis=0)
         all_targets_np = np.concatenate(all_targets_list, axis=0)
         binary_targets_np = (all_targets_np >= 0.5).astype(int)
 
-        # [调用修复好的最新版混淆矩阵 (传入 5 个参数)]
         plot_event_confusion_matrix(all_probs_np, all_targets_np, classes, tolerance, args.save_dir)
 
-        # [高级制图]
         plot_roc_curve_and_auc(all_probs_np, binary_targets_np, classes, args.save_dir)
         plot_pr_curve(all_probs_np, binary_targets_np, classes, args.save_dir)
 
@@ -410,13 +418,16 @@ def main():
         plot_temporal_error_distribution(temporal_errors, classes, args.save_dir)
 
         plot_timeline_visualization(sample_probs, sample_targets, classes, args.save_dir)
-        plot_event_interval_consistency(all_probs_np, all_targets_np, args.save_dir)
 
-        print("[绘图模块] 全部图表已生成完毕，请前往 result 目录查看！")
+        # 👇 [✨ 动态架构切换 5] 传入 backbone_type 以修改图表的 Legend 标签
+        plot_event_interval_consistency(all_probs_np, all_targets_np, args.save_dir, model_name=backbone_type)
+
+        print(f"[绘图模块] {backbone_type} 全部图表已生成完毕，请前往 {args.save_dir} 目录查看！")
     except Exception as e:
         import traceback
         traceback.print_exc()
         print(f"[错误] 绘图发生异常: {e}")
+
 
 if __name__ == "__main__":
     main()

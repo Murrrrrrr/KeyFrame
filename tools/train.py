@@ -11,6 +11,7 @@ import multiprocessing
 # 从系统搭建的各个模块导入组件
 from datasets.pose_dataset import PoseSequenceDataset
 from models.struct_lnn import StructLNN
+from LSTM_models.baseline_lstm import BaselineLSTM
 from models.physics_loss import StructLNNLoss
 from utils.metrics import SparseKeyframeMetrics
 
@@ -62,7 +63,14 @@ def main():
     )
 
     # 核心模型与物理损失初始化
-    model = StructLNN(config=config)
+    backbone_type = config.get('model', {}).get('backbone', 'CfC')
+
+    if backbone_type == "LSTM":
+        print("[架构切换] 正在使用 Baseline LSTM 进行离散时间基线对比实验...")
+        model = BaselineLSTM(config=config)
+    else:
+        print("[架构切换] 正在使用 Struct-LNN (CfC) 进行连续时间动力学建模...")
+        model = StructLNN(config=config)
     model = model.to(device)
 
     # 提取 Loss 配置

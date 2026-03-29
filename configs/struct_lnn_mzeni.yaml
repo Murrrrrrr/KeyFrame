@@ -36,7 +36,7 @@ data:
 
 # 网络架构配置
 model:
-  backbone: "CfC" # 闭式连续时间神经网络单元
+  backbone: "CfC"
 
   input_dim: 43 # 21维空间  + 21维速度 + 1维 M-Zeni= 43维
   hidden_size: 64 # 隐藏层与投影：映射至更高表达能力的隐藏语义空间
