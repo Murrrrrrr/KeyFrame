@@ -44,13 +44,12 @@ class BaselineLSTM(nn.Module):
         # 3. 任务输出头 (执行层，完全复用)
         self.event_head = EventHead(hidden_dim=hidden_dim, num_classes=num_classes)
 
-    def forward(self, batch_data):
+    def forward(self, x,dt):
         """
         前向传播
         :param batch_data: 包含 (x, dt) 的元组，为了保持接口一致
         """
         # 注意：在这里提取了 dt，但 LSTM 根本不使用它！这正是离散模型的致命缺陷。
-        x, dt = batch_data
 
         # 归一化处理
         x_normlized = self.input_norm(x)

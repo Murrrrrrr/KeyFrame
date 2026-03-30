@@ -65,6 +65,8 @@ def main():
 
     # 核心模型与物理损失初始化
     backbone_type = config.get('model', {}).get('backbone', 'CfC')
+    input_dim = config.get('model', {}).get('input_dim', 43)
+    d_model = config.get('model', {}).get('hidden_size', 64)
 
     if backbone_type == "LSTM":
         print("[架构切换] 正在使用 Baseline LSTM 进行离散时间基线对比实验...")
@@ -137,7 +139,7 @@ def main():
             # 开启 AMP 上下文
             device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
             with autocast(device_type=device_type):
-                logits = model(batch_data)
+                logits = model(*batch_data)
                 # 计算总损失 (融合分类与物理去抖)
                 total_loss, focal_loss, phys_loss = criterion(logits, batch_labels)
 
@@ -167,7 +169,7 @@ def main():
                 batch_labels = batch_labels.to(device, non_blocking=True)
 
                 with autocast(device_type=device_type):
-                    logits = model(batch_data)
+                    logits = model(*batch_data)
                     loss, _, _ = criterion(logits, batch_labels)
 
                 val_loss_epoch += loss.item()

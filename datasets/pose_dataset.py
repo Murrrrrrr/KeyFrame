@@ -26,8 +26,12 @@ class PoseSequenceDataset(Dataset):
         self.stride = dataset_cfg.get('stride', 16)
         self.base_dt = dataset_cfg.get('fps', 120)
 
-        # 仅在 train 模式且 config 允许时开启硬件抖动仿真
-        self.simulate_jitter = dataset_cfg.get('simulate_jitter', False) and (split == 'train')
+        # === 修改代码开始：确保在所有数据集（Train/Val/Test）中均可开启硬件抖动 ===
+        # 去除了旧代码中 and (split == 'train') 的限制
+        # 现在只要 YAML 配置文件中 simulate_jitter: true，所有的评估和测试过程都会经历严酷的丢帧考验
+        self.simulate_jitter = dataset_cfg.get('simulate_jitter', False)
+        # === 修改代码结束 ===
+
         self.jitter_std = dataset_cfg.get('jitter_std', 0.2)
         self.drop_rate = dataset_cfg.get('drop_rate', 0.05)
         self.extract_m_zeni = dataset_cfg.get('extract_m_zeni', True)
@@ -108,17 +112,33 @@ class PoseSequenceDataset(Dataset):
         if not self.extract_m_zeni:
             features = features[:, :-1]
 
+        # 真实物理事件（标签）在客观世界中不受传感器卡顿影响，依然保持正常时序
         labels = self._get_mmap(sample_info['label_path'])[start:end].copy()
 
         # 硬件时间戳抽象：生成 dt 数组
         dt_array = np.full((self.seq_len, 1), self.base_dt, dtype=np.float32)
 
-        # (软硬协同模块) 开启时磨你边缘端 I2C/MIPI 接口读取传感器时的时钟抖动和总线阻塞丢帧
+        # === 修改代码开始：真实物理硬件工况仿真 (零阶保持 + 动力学时间累加) ===
+        # (软硬协同模块) 开启时模拟边缘端 I2C/MIPI 接口读取传感器时的时钟抖动和总线阻塞丢帧
         if self.simulate_jitter:
+            # 1. 模拟底层晶振微秒级时钟抖动 (高斯白噪声)
             jitter = np.random.normal(0, self.base_dt * self.jitter_std, (self.seq_len, 1))
             dt_array = np.clip(dt_array + jitter, a_min=1e-4, a_max=None)
-            drop_mask = np.random.rand(self.seq_len, 1) < self.drop_rate
-            dt_array[drop_mask] *= np.random.randint(2, 4)
+
+            # 2. 模拟真实的总线阻塞/物理丢帧
+            drop_mask = np.random.rand(self.seq_len) < self.drop_rate
+            drop_mask[0] = False # 保证序列的第0帧永远有效，作为初始常数参考
+
+            for i in range(1, self.seq_len):
+                if drop_mask[i]:
+                    # 硬件级故障：当前帧读取超时，或者图像包丢失
+                    # 内存缓冲区只能被迫执行零阶保持 (Zero-Order Hold)，输出上一帧的陈旧数据
+                    features[i] = features[i-1]
+
+                    # 连续时间模型的核心给养：时间戳累加
+                    # 告诉 ODE 积分器，虽然收到了数据，但距离上一次拿到“新鲜”数据已经过去了更久的时间
+                    dt_array[i] = dt_array[i-1] + self.base_dt
+        # === 修改代码结束 ===
 
         # 转换为PyTorch Tensors
         x_tensor = torch.tensor(features, dtype=torch.float32)

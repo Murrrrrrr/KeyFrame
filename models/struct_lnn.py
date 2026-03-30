@@ -37,13 +37,12 @@ class StructLNN(nn.Module):
         # 任务输出头（执行层）
         self.event_head = EventHead(hidden_dim=hidden_dim, num_classes=num_classes)
 
-    def forward(self, batch_data):
+    def forward(self, x,dt):
         """
         前向传播总线
         :param x: [Batch, seq_len, 61]
         :param dt: [Batch, seq_len, 1]
         """
-        x, dt = batch_data
         batch_size ,seq_len, _ = x.size()
         # 保留 M-Zeni 等物理信号波形的前提下，将其拉入神经网络适宜的数值区间
         x_normlized = self.input_norm(x)

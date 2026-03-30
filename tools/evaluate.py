@@ -11,6 +11,8 @@ from scipy.signal import find_peaks
 
 from datasets.pose_dataset import PoseSequenceDataset
 from models.struct_lnn import StructLNN
+from LSTM_models.baseline_lstm import BaselineLSTM
+from transformer_models.baseline_transformer import BaselineTransformer
 from utils.metrics import SparseKeyframeMetrics
 
 # 设置 plt 中文字体
@@ -305,7 +307,20 @@ def main():
     test_dataset = PoseSequenceDataset(config, split='test')
     test_loader = DataLoader(test_dataset, batch_size=config['training']['batch_size'], shuffle=False, num_workers=0)
 
-    model = StructLNN(config, num_classes=5).to(device)
+    backbone_type = config.get('model', {}).get('backbone', 'CfC')
+    input_dim = config.get('model', {}).get('input_dim', 66)
+    d_model = config.get('model', {}).get('hidden_size', 64)
+
+    if backbone_type == "LSTM":
+        print(f"[*] 评估模式：正在加载 Baseline LSTM ...")
+        model = BaselineLSTM(input_dim=input_dim, hidden_size=d_model)
+    elif backbone_type == "Transformer":
+        print(f"[*] 评估模式：正在加载 Baseline Transformer ...")
+        model = BaselineTransformer(input_dim=input_dim, d_model=d_model)
+    else:
+        print(f"[*] 评估模式：正在加载 Struct-LNN (CfC) ...")
+        model = StructLNN(config=config)
+    model.to(device)
     checkpoint = torch.load(args.checkpoint, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
@@ -322,7 +337,7 @@ def main():
             batch_data = tuple(item.to(device, non_blocking=True) for item in batch_data)
             batch_labels = batch_labels.to(device, non_blocking=True)
 
-            logits = model(batch_data)
+            logits = model(*batch_data)
             metrics.update(logits, batch_labels)
 
             probs = torch.sigmoid(logits)
@@ -391,7 +406,7 @@ def main():
     overall_mae = np.mean(all_errors) if len(all_errors) > 0 else 0.0
 
     print("\n" + "=" * 80)
-    print(f"                   LNN 测试集评估报告")
+    print(f"                 {backbone_type} 测试集评估报告")
     print("=" * 80)
 
     for c in classes:
