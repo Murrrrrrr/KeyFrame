@@ -10,7 +10,8 @@ class PhysicsPriorExtractor(nn.Module):
                  left_toe_idx, right_toe_idx,
                  left_heel_idx, right_heel_idx,
                  smooth_velocity=True,
-                 toe_weight=0.5, ankle_weight=0.8):
+                 toe_weight=0.5, ankle_weight=0.8,
+                 bidirectional_ema=True, max_dt=0.1):
         """
         M-Zeni (骨盆质心 + 双踝联合约束)的 43 维特征提取
         :param pelvis_idx: 骨盆索引 - 经典 Zeni 算法参考系原点
@@ -33,6 +34,8 @@ class PhysicsPriorExtractor(nn.Module):
         self.smooth_velocity = smooth_velocity
         self.toe_weight = toe_weight
         self.ankle_weight = ankle_weight
+        self.bidirectional_ema = bidirectional_ema
+        self.max_dt = max_dt
 
     def forward(self, pose_seq, dt_seq):
         """
@@ -46,9 +49,9 @@ class PhysicsPriorExtractor(nn.Module):
         spatial_features = pose_seq.view(batch_size, seq_len, num_kpts * dims)
 
         # 一阶运动学差分
-        velocity_features = compute_kinematics_derivative(spatial_features, dt_seq)
+        velocity_features = compute_kinematics_derivative(spatial_features, dt_seq, max_dt=self.max_dt)
         if self.smooth_velocity:
-            velocity_features = ema_lowpass_filter_tensor(velocity_features, alpha=0.7)
+            velocity_features = ema_lowpass_filter_tensor(velocity_features, alpha=0.7, bidirectional=self.bidirectional_ema)
 
         # 提取相关的物理节点的3D坐标  [Batch, SeqLen, 3]
         pelvis = pose_seq[:, :, self.pelvis_idx, :]

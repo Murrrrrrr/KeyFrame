@@ -24,21 +24,16 @@ class PoseSequenceDataset(Dataset):
 
         self.seq_len = dataset_cfg.get('seq_len', 64)
         self.stride = dataset_cfg.get('stride', 16)
-        self.base_dt = dataset_cfg.get('fps', 120)
+        fps = dataset_cfg.get('fps', 120)
+        self.base_dt = 1.0 / fps
 
-        # === 修改代码开始：确保在所有数据集（Train/Val/Test）中均可开启硬件抖动 ===
-        # 去除了旧代码中 and (split == 'train') 的限制
-        # 现在只要 YAML 配置文件中 simulate_jitter: true，所有的评估和测试过程都会经历严酷的丢帧考验
         self.simulate_jitter = dataset_cfg.get('simulate_jitter', False)
-        # === 修改代码结束 ===
 
         self.jitter_std = dataset_cfg.get('jitter_std', 0.2)
         self.drop_rate = dataset_cfg.get('drop_rate', 0.05)
         self.extract_m_zeni = dataset_cfg.get('extract_m_zeni', True)
         self.samples = []
 
-        # 初始化一个文件映射缓存池，避免 __getitem__ 中疯狂打开/关闭
-        self.mmap_cache = {}
         self._build_index()
 
     def _build_index(self):
@@ -108,37 +103,49 @@ class PoseSequenceDataset(Dataset):
         end = start + self.seq_len
 
         # 提取多模态特征矩阵
-        features = self._get_mmap(sample_info['data_path'])[start:end].copy()
+        feature_mmap = np.load(sample_info['data_path'], mmap_mode='r')
+        features = feature_mmap[start:end].copy()
         if not self.extract_m_zeni:
             features = features[:, :-1]
 
         # 真实物理事件（标签）在客观世界中不受传感器卡顿影响，依然保持正常时序
-        labels = self._get_mmap(sample_info['label_path'])[start:end].copy()
+        label_mmap = np.load(sample_info['label_path'], mmap_mode='r')
+        labels = label_mmap[start:end].copy()
 
         # 硬件时间戳抽象：生成 dt 数组
         dt_array = np.full((self.seq_len, 1), self.base_dt, dtype=np.float32)
 
-        # === 修改代码开始：真实物理硬件工况仿真 (零阶保持 + 动力学时间累加) ===
-        # (软硬协同模块) 开启时模拟边缘端 I2C/MIPI 接口读取传感器时的时钟抖动和总线阻塞丢帧
+        # 开启时模拟边缘端 I2C/MIPI 接口读取传感器时的时钟抖动和总线阻塞丢帧
         if self.simulate_jitter:
-            # 1. 模拟底层晶振微秒级时钟抖动 (高斯白噪声)
+            # 模拟底层晶振微秒级时钟抖动
             jitter = np.random.normal(0, self.base_dt * self.jitter_std, (self.seq_len, 1))
-            dt_array = np.clip(dt_array + jitter, a_min=1e-4, a_max=None)
+            dt_array = np.clip(dt_array + jitter, 0, 1)
+            # ⭐ 2. 模拟真实的突发性总线阻塞 (Burst Packet Loss)
+            drop_mask = np.zeros(self.seq_len, dtype=bool)
 
-            # 2. 模拟真实的总线阻塞/物理丢帧
-            drop_mask = np.random.rand(self.seq_len) < self.drop_rate
-            drop_mask[0] = False # 保证序列的第0帧永远有效，作为初始常数参考
+            i = 1  # 保证第 0 帧永远有效，作为初始参考
+            while i < self.seq_len:
+                # 掷骰子，判断当前时刻总线是否发生故障
+                if np.random.rand() < self.drop_rate:
+                    # 一旦故障，随机连续卡死 1 到 10 帧 (可根据硬件恶劣程度在参数里配置)
+                    burst_length = np.random.randint(1, 11)
 
+                    # 计算故障结束的帧索引，注意不要越界
+                    end_idx = min(i + burst_length, self.seq_len)
+
+                    # 将这一段连续区间全部标记为丢帧
+                    drop_mask[i:end_idx] = True
+
+                    # 故障期间不再重复掷骰子，直接跳过这段黑暗期
+                    i = end_idx
+                else:
+                    i += 1  # 设备正常，看下一帧
+
+            # 3. 执行物理层面的“零阶保持 (Zero-Order Hold)”
             for i in range(1, self.seq_len):
                 if drop_mask[i]:
-                    # 硬件级故障：当前帧读取超时，或者图像包丢失
-                    # 内存缓冲区只能被迫执行零阶保持 (Zero-Order Hold)，输出上一帧的陈旧数据
-                    features[i] = features[i-1]
-
-                    # 连续时间模型的核心给养：时间戳累加
-                    # 告诉 ODE 积分器，虽然收到了数据，但距离上一次拿到“新鲜”数据已经过去了更久的时间
-                    dt_array[i] = dt_array[i-1] + self.base_dt
-        # === 修改代码结束 ===
+                    # 硬件卡顿期间，内存缓冲区只能吐出上一帧的陈旧残留数据
+                    features[i] = features[i - 1]
 
         # 转换为PyTorch Tensors
         x_tensor = torch.tensor(features, dtype=torch.float32)

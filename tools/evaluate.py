@@ -316,7 +316,7 @@ def main():
         model = BaselineLSTM(input_dim=input_dim, hidden_size=d_model)
     elif backbone_type == "Transformer":
         print(f"[*] 评估模式：正在加载 Baseline Transformer ...")
-        model = BaselineTransformer(input_dim=input_dim, d_model=d_model)
+        model = BaselineTransformer(input_dim=input_dim, hidden_dim=d_model)
     else:
         print(f"[*] 评估模式：正在加载 Struct-LNN (CfC) ...")
         model = StructLNN(config=config)

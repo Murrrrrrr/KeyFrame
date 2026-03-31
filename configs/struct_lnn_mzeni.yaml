@@ -28,6 +28,8 @@ data:
   # 数据预处理与特征工程特定参数
   ema_alpha: 0.7
   selected_indices: [0,1,2,3,4,5,6]
+  bidirectional_ema: true # 是否开启双向滤波消除延迟 (离线训练建议 true，实时推理设为 false)
+  max_dt_clip: 0.1
 
   # 硬件仿真参数
   simulate_jitter: true
@@ -42,7 +44,9 @@ model:
   hidden_size: 64 # 隐藏层与投影：映射至更高表达能力的隐藏语义空间
   num_classes: 5
   num_layers: 2
-  output_dim: 5 #任务解码头：回归为一维的任务输出（触地/离地 logits）
+  output_dim: 5 #任务解码头：回归为五维的任务输出（触地/离地 logits）
+  time_scale: 10.0 # 硬件物理时间缩放因子
+  # 120FPS 建议设为 10.0 ~ 15.0，30FPS 建议设为 1.0 ~ 2.0
 
 training:
   batch_size: 32

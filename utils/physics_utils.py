@@ -14,34 +14,45 @@ L_HIP_IDX = 4
 L_KNEE_IDX = 5
 L_ANKLE_IDX = 6
 
-
-def ema_lowpass_filter_tensor(signal, alpha=0.7):
+def ema_lowpass_filter_tensor(signal, alpha=0.7, bidirectional=True):
     """
     一阶 EMA 低通滤波
     用于消除单目相机的果冻效应毛刺和硬件时钟抖动
     :param signal: [Batch, SeqLen, FeatureDim] 的张量
     :param alpha: 滤波系数，越大越平滑但延迟越高
+    :param bidirectional: 是否开启双向滤波。开启后可消除单向滤波造成的预测滞后现象
     """
+    # 正向 EMA 滤波
     smoothed_signal = torch.zeros_like(signal)
     smoothed_signal[:, 0, :] = signal[:, 0, :]
     for t in range(1, signal.size(1)):
         smoothed_signal[:, t, :] = alpha * signal[:, t, :] + (1 - alpha) * smoothed_signal[:, t - 1, :]
+    # 反向 EMA 滤波（零相位补偿）
+    if bidirectional:
+        smoothed_backward = torch.zeros_like(signal)
+        # 从最后一帧开始反向推演
+        smoothed_backward[:, -1, :] = smoothed_signal[:, -1, :]
+        for t in range(signal.size(1) - 2, -1, -1):
+            smoothed_backward[:,t,:] = alpha * smoothed_signal[:,t,:] + (1 - alpha) * smoothed_backward[:,t + 1, :]
     return smoothed_signal
 
-def compute_kinematics_derivative(spatial_features, dt_seq, min_dt=1e-4):
+def compute_kinematics_derivative(spatial_features, dt_seq, min_dt=1e-4, max_dt=0.1):
     """
     计算基于物理时间的运动学差分
     :param spatial_features: 空间坐标特征 [Batch, SeqLen, Dim]
     :param dt_seq: 物理时间间隔 [Batch, SeqLen, 1]
     :param min_di: 防止硬件时钟断流导致除零的安全阈值
+    :param max_dt: 防止硬件长时间挂起恢复后，单步 dt 过大导致速度畸变（视为非物理瞬移）
     """
     velocity = torch.zeros_like(spatial_features)
-    dt_safe = torch.clamp(dt_seq, min=min_dt)
+    # 双端截断保护，不仅防除零，也防卡顿重连
+    dt_safe = torch.clamp(dt_seq, min=min_dt, max=max_dt)
     # 前向差分计算
     vel_diff = (spatial_features[:, 1:, :] - spatial_features[:, :-1, :]) / dt_safe[:, 1:, :]
     velocity[:, 1:, :] = vel_diff
     # 零阶保持器填补第一帧
     velocity[:, 0, :]= velocity[:, 1, :]
+
     return velocity
 
 def estimate_forward_direction(pelvis_pos):

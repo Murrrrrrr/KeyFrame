@@ -2,13 +2,11 @@ import torch
 import torch.nn as nn
 import math
 
-# 确保这里的导入路径正确
 from models.heads.event_head import EventHead
 
 
 class PositionalEncoding(nn.Module):
     """经典的固定位置编码（体现离散模型的缺陷）"""
-
     def __init__(self, d_model, max_len=500):
         super(PositionalEncoding, self).__init__()
         pe = torch.zeros(max_len, d_model)
@@ -31,7 +29,6 @@ class BaselineTransformer(nn.Module):
     基线对比网络：自注意力机制 Transformer
     结合因果掩码 (Causal Mask) 模拟真实的流式实时推理环境
     """
-
     def __init__(self, config=None, input_dim=43, hidden_dim=64, num_classes=5, num_layers=2):
         super(BaselineTransformer, self).__init__()
 
