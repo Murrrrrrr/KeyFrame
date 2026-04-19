@@ -5,14 +5,18 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="c589d863-93df-4603-a45d-8b55be732b4f" name="更改" comment="">
+      <change afterPath="$PROJECT_DIR$/engine/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/engine/evaluator.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/engine/loss.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/engine/trainer.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/configs/struct_lnn_mzeni.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/configs/struct_lnn_mzeni.yaml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/datasets/pose_dataset.py" beforeDir="false" afterPath="$PROJECT_DIR$/datasets/pose_dataset.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/features/physics_priors.py" beforeDir="false" afterPath="$PROJECT_DIR$/features/physics_priors.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/backbones/cfc_core.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/backbones/cfc_core.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/heads/event_head.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/heads/event_head.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/models/physics_loss.py" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/models/struct_lnn.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/struct_lnn.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tools/evaluate.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/evaluate.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tools/train.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/train.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/transformer_models/baseline_transformer.py" beforeDir="false" afterPath="$PROJECT_DIR$/transformer_models/baseline_transformer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/utils/physics_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/physics_utils.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -48,6 +52,7 @@
     &quot;ASKED_MARK_IGNORED_FILES_AS_EXCLUDED&quot;: &quot;true&quot;,
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
     &quot;Python.check_cuda.executor&quot;: &quot;Run&quot;,
+    &quot;Python.check_embbeding.executor&quot;: &quot;Run&quot;,
     &quot;Python.check_features.executor&quot;: &quot;Run&quot;,
     &quot;Python.check_labels.executor&quot;: &quot;Run&quot;,
     &quot;Python.check_labels_generate.executor&quot;: &quot;Run&quot;,

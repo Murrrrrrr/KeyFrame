@@ -1,5 +1,7 @@
 """ 将 feature.npy 文件打包成 PyTorch 的张量tensor"""
 import os
+from itertools import accumulate
+
 import numpy as np
 import torch
 import json
@@ -28,11 +30,21 @@ class PoseSequenceDataset(Dataset):
         self.base_dt = 1.0 / fps
 
         self.simulate_jitter = dataset_cfg.get('simulate_jitter', False)
-
         self.jitter_std = dataset_cfg.get('jitter_std', 0.2)
         self.drop_rate = dataset_cfg.get('drop_rate', 0.05)
         self.extract_m_zeni = dataset_cfg.get('extract_m_zeni', True)
+        # train和valid 保持完美的时序，给test加入硬件抖动
+        if self.split_mode in ['train', 'valid']:
+            self.simulate_jitter = False
+            print(f" 模式 {self.split_mode.upper()}: 已关闭硬件抖动")
+        elif self.split_mode == 'test':
+            self.simulate_jitter = True
+            self.drop_rate = 0.3
+            self.jitter_std = 0.5
+            print(f" [硬件警告] 模式 TEST：开启硬件抖动。丢帧率为：{self.drop_rate}")
+
         self.samples = []
+        self.mmap_cache = {}
 
         self._build_index()
 
@@ -140,12 +152,22 @@ class PoseSequenceDataset(Dataset):
                     i = end_idx
                 else:
                     i += 1  # 设备正常，看下一帧
-
+            accumulated_dt = 0.0
             # 3. 执行物理层面的“零阶保持 (Zero-Order Hold)”
             for i in range(1, self.seq_len):
                 if drop_mask[i]:
                     # 硬件卡顿期间，内存缓冲区只能吐出上一帧的陈旧残留数据
                     features[i] = features[i - 1]
+                    # 🚀 [LNN 核心修复] 既然数据没更新，告诉 ODE 物理引擎“时间冻结”，停止积分
+                    accumulated_dt += dt_array[i, 0]  # 把这帧原本该走的时间存起来
+                    dt_array[i, 0] = 1e-4  # 给一个极小值防止除零异常，实质上暂停 LNN 内部的流体演化
+                else:
+                    # 硬件通讯恢复，读到了全新的有效特征
+                    if accumulated_dt > 0:
+                        # 🚀 [LNN 核心修复] 将之前积攒的所有黑暗时间，一次性补偿给恢复后的这一帧
+                        # 让 LNN 的微分方程瞬间完成“跨越式积分”，跟上真实世界的物理进度
+                        dt_array[i, 0] += accumulated_dt
+                        accumulated_dt = 0.0  # 清空累加器
 
         # 转换为PyTorch Tensors
         x_tensor = torch.tensor(features, dtype=torch.float32)

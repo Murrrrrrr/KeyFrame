@@ -3,41 +3,49 @@ import torch.nn as nn
 
 class CfCCell(nn.Module):
     """
-    闭式连续时间核心单元（Closed-form Continuous Core）
-    负责处理非均匀采样和物理时钟抖动 (Jitter)
+    闭式连续时间单元 (Closed-form Continuous-time Cell)
+    液态神经网络的核心动力学推演模块，能够处理非均匀采样的时间序列
     """
     def __init__(self, input_dim, hidden_dim):
         super(CfCCell, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
 
-        # 神经主干 --计算稳态目标
-        self.bb_x = nn.Linear(input_dim, hidden_dim)
-        self.bb_h = nn.Linear(hidden_dim, hidden_dim)
+        # 时间常数门控网络
+        # 负责根据当前输入和历史状态，动态推算时间缩放因子 tau
+        self.time_net = nn.Sequential(
+            nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.Sigmoid(), # 限制时间门控在 （0，1） 之间
+        )
 
-        # 时间门控机制 --计算衰减率与偏移
-        self.time_scale_fc = nn.Linear(input_dim + hidden_dim, hidden_dim)
-        self.time_shift_fc = nn.Linear(input_dim + hidden_dim, hidden_dim)
+        # 状态推演主干网络
+        self.state_net = nn.Sequential(
+            nn.Linear(input_dim + hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.Tanh() # Tanh 激活函数
+        )
 
     def forward(self, x, hx, dt):
         """
-        :param x: [Batch, input_dim] 当前帧特征
-        :param hx: [Batch, hidden_dim] 上一帧隐藏状态
-        :param dt: [Batch,1] 硬件物理时间间隔 \Delta t
-        :return: [Batch, hidden_dim]
+        :param x: 当前时刻的输入特征 [Batch, input_dim]
+        :param hx: 上一时刻的隐状态 [Batch, hidden_dim]
+        :param dt: 距离上一帧的物理时间间隔 [Batch, 1]
         """
-        # 计算隐藏状态的稳态候选值
-        state_update = torch.tanh(self.bb_x(x) + self.bb_h(hx))
+        # 融合输入特征与历史状态
+        combined = torch.cat([x, hx], dim=-1)
 
-        # 拼接特征用于计算 ODE 时间参数
-        xh_cat = torch.cat([x, hx], dim=-1)
-        time_scale = torch.sigmoid(self.time_scale_fc(xh_cat))
-        time_shift = self.time_shift_fc(xh_cat)
+        # 动态时间常数推断
+        tau = self.time_net(combined)
 
-        # CfC 闭式连续时间求解核心公式
-        exponent = -time_scale * dt - time_shift
-        exponent = torch.clamp(exponent, max=0.0)
-        decay = torch.exp(exponent) # 保证 decay 永远在 (0, 1] 之间
-        h_new = hx * decay + state_update * (1.0 - decay)
+        # 计算基于真实物理时间的时间衰减因子 （Liquid 核心机制）
+        # e^(-dt * tau)
+        decay = torch.exp(-dt * tau)
 
-        return h_new
+        # 计算连续时间推演的目标状态
+        target_state = self.state_net(combined)
+
+        # 闭式状态更新
+        # 新状态 = 旧状态的自然衰减 + 目标状态随时间的积累补偿
+        new_hx = hx * decay + target_state * (1.0 - decay)
+        return new_hx

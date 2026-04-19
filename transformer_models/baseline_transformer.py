@@ -78,7 +78,7 @@ class BaselineTransformer(nn.Module):
         x_feature = self.feature_projection(x_normlized)
 
         # 2. 加入离散位置编码
-        x_feature = self.pos_encoder(x_feature)
+        # x_feature = self.pos_encoder(x_feature)
 
         # 3. 【方案一：架构对齐】生成因果注意力掩码 (Causal Mask)
         # 生成一个 [seq_len, seq_len] 的矩阵，对角线及左下角为 0，右上角（未来时间步）为 -inf
