@@ -5,18 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="c589d863-93df-4603-a45d-8b55be732b4f" name="更改" comment="">
-      <change afterPath="$PROJECT_DIR$/engine/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/engine/evaluator.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/engine/loss.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/engine/trainer.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/datasets/pose_dataset.py" beforeDir="false" afterPath="$PROJECT_DIR$/datasets/pose_dataset.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/backbones/cfc_core.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/backbones/cfc_core.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/heads/event_head.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/heads/event_head.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/physics_loss.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/models/struct_lnn.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/struct_lnn.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tools/train.py" beforeDir="false" afterPath="$PROJECT_DIR$/tools/train.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/transformer_models/baseline_transformer.py" beforeDir="false" afterPath="$PROJECT_DIR$/transformer_models/baseline_transformer.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/models/baselines/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/models/baselines/baseline_lstm.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
