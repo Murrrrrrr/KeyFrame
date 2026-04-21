@@ -20,12 +20,18 @@ class StructLNN(nn.Module):
         self.time_scale = model_cfg.get("time_scale", 10.0)
 
         # 物理特征投影层（感知层融合与升维）
-        self.input_dim = nn.LayerNorm(self.input_dim)
+        self.input_norm = nn.LayerNorm(self.input_dim)
         self.feature_projection = nn.Sequential(
             nn.Linear(self.input_dim, self.hidden_dim),
             nn.LayerNorm(self.hidden_dim),
             nn.SiLU(),
         )
+
+        # 实例化连续时间 RNN 核心模块
+        self.rnn_cell = CfCCell(input_dim=self.hidden_dim, hidden_dim=self.hidden_dim)
+
+        # 实例化任务接码头
+        self.event_head = EventHead(hidden_dim=self.hidden_dim, num_classes=self.num_classes)
 
     def forward(self, x, dt):
         """
@@ -36,7 +42,7 @@ class StructLNN(nn.Module):
         batch_size, seq_len, _= x.size()
 
         # 保留 M-Zeni 等物理信号波形的前提下，将其拉入神经网络适宜的数值区间
-        x_normalized = self.input_dim(x)
+        x_normalized = self.input_norm(x)
         x_feature = self.feature_projection(x_normalized)
 
         # 隐状态初始化
@@ -54,7 +60,7 @@ class StructLNN(nn.Module):
             outputs.append(hx.unsqueeze(1))
 
         # 内存连续化拼接：[Batch, seq_len, hidden_dim]
-        sequence_output = torch.cat(outputs, dims = 1)
+        sequence_output = torch.cat(outputs, dim = 1)
 
         # 降维回归，得出全序列的关键帧 Logits
         logits = self.event_head(sequence_output)

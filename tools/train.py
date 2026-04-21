@@ -9,10 +9,9 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from datasets.pose_dataset import PoseSequenceDataset
-from LSTM_models.baseline_lstm import BaselineLSTM
-from datasets.pose_dataset import PoseSequenceDataset
+from models.baselines.baseline_lstm import BaselineLSTM
 from models.struct_lnn import StructLNN
-from transformer_models.baseline_transformer import BaselineTransformer
+from models.baselines.baseline_transformer import BaselineTransformer
 
 # 从项目核心模块中导入
 from engine.loss import StructLNNLoss
@@ -44,8 +43,8 @@ def main():
 
     # 从config中载入参数
     train_cfg = config.get('training',{})
-    batch_size = train_cfg('batch_size', 32)
-    num_workers = train_cfg('num_workers', min(8, multiprocessing.cpu_count() // 2))
+    batch_size = train_cfg.get('batch_size', 32)
+    num_workers = train_cfg.get('num_workers', min(8, multiprocessing.cpu_count() // 2))
 
     train_loader = DataLoader(
         train_dataset,
@@ -76,9 +75,9 @@ def main():
     # 损失函数实例化
     loss_cfg = train_cfg.get('loss', {})
     criterion = StructLNNLoss(
-        physics_weight=loss_cfg['physics_weight', 1.0],
-        pos_weight=loss_cfg['pos_weight', 60.0],
-        gamma = loss_cfg['gamma', 2.0]
+        physics_weight=loss_cfg.get('physics_penalty_weight', 1.0),
+        pos_weight=loss_cfg.get('pos_weight', 60.0),
+        gamma = loss_cfg.get('gamma', 2.0)
     )
 
     # 优化器

@@ -123,7 +123,7 @@ class Trainer:
 
             # 提取指标
             val_loss = metrics_result.get('Loss', 0.0)
-            current_f1 = metrics_result.get('F1_score', 0.0)
+            current_f1 = metrics_result.get('F1_Score', 0.0)
             precision = metrics_result.get('Precision', 0.0)
             recall = metrics_result.get('Recall', 0.0)
 

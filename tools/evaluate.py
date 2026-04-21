@@ -11,8 +11,8 @@ from scipy.signal import find_peaks
 
 from datasets.pose_dataset import PoseSequenceDataset
 from models.struct_lnn import StructLNN
-from LSTM_models.baseline_lstm import BaselineLSTM
-from transformer_models.baseline_transformer import BaselineTransformer
+from models.baselines.baseline_lstm import BaselineLSTM
+from models.baselines.baseline_transformer import BaselineTransformer
 from utils.metrics import SparseKeyframeMetrics
 
 # 设置 plt 中文字体
