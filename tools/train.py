@@ -77,8 +77,10 @@ def main():
     loss_cfg = train_cfg.get('loss', {})
     criterion = StructLNNLoss(
         physics_weight=loss_cfg.get('physics_penalty_weight', 1.0),
-        pos_weight=loss_cfg.get('pos_weight', 60.0),
-        gamma = loss_cfg.get('gamma', 2.0)
+        pos_weight=loss_cfg.get('pos_weight', 30.0),
+        gamma = loss_cfg.get('focal_gamma', 2.0),
+        alpha=loss_cfg.get('alpha', 0.25),
+        min_step_frames=loss_cfg.get('min_step_frames', 5)
     )
 
     # 优化器
