@@ -30,7 +30,8 @@ def main():
     with open(args.config, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    device = torch.device(config['device'])
+    device_name = config.get("device", 'cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device(device_name)
     print(f" [初始化] 训练过程即将挂载至设备：{device}")
 
     # 开启硬件底层加速
@@ -87,16 +88,6 @@ def main():
         weight_decay = 1e-2
     )
 
-    # 中断恢复逻辑
-    start_epoch = 0
-    if args.resume and os.path.isfile(args.resume):
-        print(f" [恢复] 正在从 {args.resume} 恢复训练上下文...")
-        checkpoint = torch.load(args.resume, map_location=device)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        start_epoch = checkpoint.get('epoch', 0) + 1
-        print(f" [恢复] 恢复成功！将从第{start_epoch + 1} 个 Epoch 继续。")
-
     print(f"数据模型装配完毕...")
     trainer = Trainer(
         model=model,
@@ -106,6 +97,27 @@ def main():
         optimizer=optimizer,
         config=config
     )
+
+    # 中断恢复逻辑
+    start_epoch = 0
+    if args.resume and os.path.isfile(args.resume):
+        print(f" [恢复] 正在从 {args.resume} 恢复训练上下文...")
+        checkpoint = torch.load(args.resume, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+        if 'scheduler_state_dict' in checkpoint and hasattr(trainer, 'scheduler'):
+            trainer.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            print(f" [恢复] 学习率调度器状态已恢复")
+
+        if 'best_f1' in checkpoint:
+            trainer.best_f1 = checkpoint['best_f1']
+
+        start_epoch = checkpoint.get('epoch', 0) + 1
+        print(f" [恢复] 恢复成功！将从第{start_epoch + 1} 个 Epoch 继续。")
+
+
+
     trainer.start_epoch = start_epoch
     trainer.run()
 

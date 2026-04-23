@@ -23,7 +23,7 @@ plt.rcParams['xtick.labelsize'] = 10
 plt.rcParams['ytick.labelsize'] = 10
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Struct-LNN 测试机评估工具")
+    parser = argparse.ArgumentParser(description="模型测试评估工具")
     parser.add_argument("--config", type=str, required=True, help="YAML 配置文件路径")
     parser.add_argument("--checkpoint", type=str, required=True, help="训练好的模型权重路径（.pth）")
     parser.add_argument("--save_dir", type=str, default="result", help="图表保存目录")
@@ -91,47 +91,50 @@ def plot_macro_event_outcomes_pie(macro_result, save_dir):
     plt.savefig(os.path.join(save_dir, "macro_pie.png"), bbox_inches='tight')
     plt.close(fig)
 
+
 def plot_event_confusion_matrix(all_probs_np, all_targets_np, classes, tolerance, save_dir):
     """ 图表4：5x5混淆矩阵 """
-    gt_peaks = []
-    pred_peaks = []
-
-    for c in range(len(classes)):
-        g_p, _ = find_peaks(all_targets_np[:, c], height=0.5)
-        for p in g_p:
-            gt_peaks.append((p, c))
-
-        p_p, _ = find_peaks(all_probs_np[:, c], height=0.3)
-        for p in p_p:
-            pred_peaks.append((p, c))
-
-    gt_peaks.sort(key=lambda x: x[0])
-    pred_peaks.sort(key=lambda x: x[0])
-
+    num_seqs = all_probs_np.shape[0]
     cm = np.zeros((6, 6), dtype=int)
-    matched_pred = set()
 
-    for gt_t, gt_c in gt_peaks:
-        best_dist = tolerance + 1
-        best_pred_idx, best_pred_c = -1, -1
+    for seq_idx in range(num_seqs):
+        gt_peaks = []
+        pred_peaks = []
+
+        # 严格在单个序列内寻找峰值
+        for c in range(len(classes)):
+            g_p, _ = find_peaks(all_targets_np[seq_idx, :, c], height=0.5)
+            for p in g_p: gt_peaks.append((p, c))
+
+            p_p, _ = find_peaks(all_probs_np[seq_idx, :, c], height=0.3)
+            for p in p_p: pred_peaks.append((p, c))
+
+        gt_peaks.sort(key=lambda x: x[0])
+        pred_peaks.sort(key=lambda x: x[0])
+
+        matched_pred = set()
+
+        for gt_t, gt_c in gt_peaks:
+            best_dist = tolerance + 1
+            best_pred_idx, best_pred_c = -1, -1
+
+            for i, (pr_t, pr_c) in enumerate(pred_peaks):
+                if i in matched_pred: continue
+                dist = abs(gt_t - pr_t)
+                if dist <= tolerance:
+                    if dist < best_dist or (dist == best_dist and pr_c == gt_c):
+                        best_dist = dist
+                        best_pred_idx, best_pred_c = i, pr_c
+
+            if best_pred_idx != -1:
+                cm[gt_c, best_pred_c] += 1
+                matched_pred.add(best_pred_idx)
+            else:
+                cm[gt_c, 5] += 1  # 漏报 (FN)
 
         for i, (pr_t, pr_c) in enumerate(pred_peaks):
-            if i in matched_pred: continue
-            dist = abs(gt_t - pr_t)
-            if dist <= tolerance:
-                if dist < best_dist or (dist == best_dist and pr_c == gt_c):
-                    best_dist = dist
-                    best_pred_idx, best_pred_c = i, pr_c
-
-        if best_pred_idx != -1:
-            cm[gt_c, best_pred_c] += 1
-            matched_pred.add(best_pred_idx)
-        else:
-            cm[gt_c, 5] += 1  # 漏报 (FN)
-
-    for i, (pr_t, pr_c) in enumerate(pred_peaks):
-        if i not in matched_pred:
-            cm[5, pr_c] += 1  # 误报 (FP)
+            if i not in matched_pred:
+                cm[5, pr_c] += 1  # 误报 (FP)
 
     display_classes = ['LHS', 'LTO', 'RHS', 'RTO', 'TMAX', 'Background\n(None)']
     fig, ax = plt.subplots(figsize=(8, 7), dpi=300)
@@ -346,10 +349,8 @@ def main():
                 sample_probs = probs[0].cpu().numpy()
                 sample_targets = batch_labels[0].cpu().numpy()
 
-            batch_size = probs.size(0)
-            seq_len = probs.size(1) if len(probs.shape) == 3 else 1
-            all_probs_list.append(probs.view(batch_size * seq_len, -1).cpu().numpy())
-            all_targets_list.append(batch_labels.view(batch_size * seq_len, -1).cpu().numpy())
+            all_probs_list.append(probs.cpu().numpy())
+            all_targets_list.append(batch_labels.cpu().numpy())
 
     result = metrics.compute()
     macro = result.get('Macro', result)
@@ -376,31 +377,33 @@ def main():
     all_probs_np = np.concatenate(all_probs_list, axis=0)
     all_targets_np = np.concatenate(all_targets_list, axis=0)
     all_errors = []
+    temporal_errors_by_class = {c: [] for c in range(5)}
     # 遍历 5 个关键帧类别
-    for c in range(5):
-        # 分别找出真实标签和模型预测的极值点（峰值）
-        g_p, _ = find_peaks(all_targets_np[:, c], height=0.5)
-        p_p, _ = find_peaks(all_probs_np[:, c], height=0.3)
+    num_seqs = all_probs_np.shape[0]
+    for seq_idx in range(num_seqs):
+        for c in range(5):
+            g_p, _ = find_peaks(all_targets_np[seq_idx, :, c], height=0.5)
+            p_p, _ = find_peaks(all_probs_np[seq_idx, :, c], height=0.3)
 
-        matched_pred = set()
-        # 对于每一个真实的物理关键帧
-        for gt_t in g_p:
-            best_dist = tolerance + 1
-            best_pred_idx = -1
+            matched_pred = set()
+            for gt_t in g_p:
+                best_dist = tolerance + 1
+                best_error_val = 0
+                best_pred_idx = -1
 
-            # 在预测的关键帧中寻找距离最近的（且在容差窗口 W=3 内的）
-            for i, pr_t in enumerate(p_p):
-                if i in matched_pred: continue
-                dist = abs(gt_t - pr_t)
-                if dist <= tolerance:
-                    if dist < best_dist:
-                        best_dist = dist
-                        best_pred_idx = i
+                for i, pr_t in enumerate(p_p):
+                    if i in matched_pred: continue
+                    dist = abs(gt_t - pr_t)
+                    if dist <= tolerance:
+                        if dist < best_dist:
+                            best_dist = dist
+                            best_error_val = pr_t - gt_t  # 带有方向性的误差 Pred - GT
+                            best_pred_idx = i
 
-            # 如果成功匹配到了预测帧，记录它们之间的绝对时间误差
-            if best_pred_idx != -1:
-                matched_pred.add(best_pred_idx)
-                all_errors.append(best_dist)
+                if best_pred_idx != -1:
+                    matched_pred.add(best_pred_idx)
+                    all_errors.append(best_dist)  # MAE 计算使用绝对值
+                    temporal_errors_by_class[c].append(best_error_val)  # 保存带符号误差给小提琴图
 
     # 计算平均绝对误差
     overall_mae = np.mean(all_errors) if len(all_errors) > 0 else 0.0
@@ -442,8 +445,12 @@ def main():
         plot_event_confusion_matrix(all_probs_np, all_targets_np, classes, tolerance, args.save_dir)
 
         # [高级制图]
-        plot_roc_curve_and_auc(all_probs_np, binary_targets_np, classes, args.save_dir)
-        plot_pr_curve(all_probs_np, binary_targets_np, classes, args.save_dir)
+        # 必须将 3D 张量 (Batch, Seq_len, 5) 展平为 (Total_Frames, 5)，sklearn 才能计算分布
+        probs_flat = all_probs_np.reshape(-1, 5)
+        targets_flat = binary_targets_np.reshape(-1, 5)
+
+        plot_roc_curve_and_auc(probs_flat, targets_flat, classes, args.save_dir)
+        plot_pr_curve(probs_flat, targets_flat, classes, args.save_dir)
 
         temporal_errors = result.get('Temporal_Errors', {c: [] for c in range(5)})
         plot_temporal_error_distribution(temporal_errors, classes, args.save_dir)

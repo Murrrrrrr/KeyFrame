@@ -167,7 +167,7 @@ def extract_m_zeni(keypoint_3d, min_frames_between_steps=35, prominence=0.05, cr
         "Toe_Max": toe_max_peaks,
     }
 
-    soft_labels = generate_gaussian_soft_labels(frames, events_dict, sigma=3.6)
+    soft_labels = generate_gaussian_soft_labels(frames, events_dict, sigma=1.0)
 
     return {
         "Left_HS": l_hs,

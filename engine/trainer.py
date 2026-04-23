@@ -2,6 +2,7 @@ import os
 import torch
 from torch.amp import autocast, GradScaler
 from tqdm import tqdm
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from engine.evaluator import Evaluator
 
@@ -9,12 +10,6 @@ class Trainer:
     def __init__(self, model, train_loader, val_loader, optimizer, criterion, config):
         """
         初始化训练引擎
-        :param model:
-        :param train_loader:
-        :param val_loader:
-        :param optimizer:
-        :param criterion:
-        :param config:
         """
         self.config = config
         self.device = torch.device(config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu'))
@@ -31,6 +26,13 @@ class Trainer:
         train_cfg = config.get('training', {})
         self.epochs = train_cfg.get('epochs', 30)
         self.start_epoch = 0
+
+        # 余弦退火学习率调度器
+        self.scheduler = CosineAnnealingLR(
+            optimizer=self.optimizer,
+            T_max=self.epochs,
+            eta_min=1e-5
+        )
 
         # 混合精度加速引擎（AMP）
         self.scaler = GradScaler("cuda", enabled=self.device.type == 'cuda')
@@ -115,11 +117,17 @@ class Trainer:
         print(f" [engine] 开始训练流水线，总 Epochs: {self.epochs}")
 
         for epoch in range(self.start_epoch, self.epochs):
+            # 获取当前 Epoch 开始时的学习率
+            current_lr = self.optimizer.param_groups[0]['lr']
+
             # 训练阶段
             train_loss = self.train_epoch(epoch)
 
             # 评估阶段
             metrics_result = self.evaluator.evaluate(epoch=epoch+1)
+
+            # 触发学习率按余弦曲线衰减
+            self.scheduler.step()
 
             # 提取指标
             val_loss = metrics_result.get('Loss', 0.0)

@@ -1,25 +1,24 @@
-""" 将 feature.npy 文件打包成 PyTorch 的张量tensor"""
+""" 将 feature.npy 文件打包成 PyTorch 的张量tensor """
 import os
-from itertools import accumulate
-
+import json
 import numpy as np
 import torch
-import json
 from torch.utils.data import Dataset
 
 class PoseSequenceDataset(Dataset):
     """
-    设计专门对于 LNN 的时序姿态数据集
+    设计时序姿态数据集
     支持长视频滑窗切割、多模态特征融合以及时间间隔特征的提取
     """
-    def __init__(self, config, split='train'):
+    def __init__(self,config, split='train'):
         self.config = config
         self.split_mode = split
 
-        # 从config 中安全解析参数
+        # 从 config 里安全解析参数
         dataset_cfg = config.get('dataset', {})
-        if not dataset_cfg:  # 兼容处理
+        if not dataset_cfg:
             dataset_cfg = config.get('data', {})
+
         self.data_dir = dataset_cfg.get('data_dir', 'data/processed_features')
         self.label_dir = dataset_cfg.get('label_dir', 'data/processed_labels')
         self.split_file = dataset_cfg.get('split_file', 'data/splits/athlete_pose_splits.json')
@@ -33,26 +32,39 @@ class PoseSequenceDataset(Dataset):
         self.jitter_std = dataset_cfg.get('jitter_std', 0.2)
         self.drop_rate = dataset_cfg.get('drop_rate', 0.05)
         self.extract_m_zeni = dataset_cfg.get('extract_m_zeni', True)
-        # train和valid 保持完美的时序，给test加入硬件抖动
-        if self.split_mode in ['train', 'valid']:
-            self.simulate_jitter = False
-            print(f" 模式 {self.split_mode.upper()}: 已关闭硬件抖动")
+
+        # 由配置文件决定是否开启抖动增强
+        if self.split_mode == 'train':
+            self.simulate_jitter = dataset_cfg.get('train_simulate_jitter', False)
+            if self.simulate_jitter:
+                self.drop_rate = dataset_cfg.get('train_drop_rate', 0.15)
+                print(f" [数据增强] 模式 TRAIN：已开启硬件抖动增强。当前丢帧率：{self.drop_rate}")
+            else:
+                print(f" 模式 TRAIN：当前处于温室训练阶段（无硬件抖动）。")
+        elif self.split_mode == 'valid':
+            # 验证集：强烈建议默认开启，并与目标部署环境对齐，这样才能选出抗干扰的 Best Model
+            self.simulate_jitter = dataset_cfg.get('val_simulate_jitter', True)
+            if self.simulate_jitter:
+                self.drop_rate = dataset_cfg.get('val_drop_rate', 0.2)  # 验证集难度可以略低于或等于测试集
+                print(f" [裁判对齐] 模式 VALID：开启硬件仿真测试。丢帧率：{self.drop_rate}")
+            else:
+                print(f" 模式 VALID：已关闭硬件抖动 (注意: 这可能导致选出的模型在真实硬件上水土不服)")
+
+        # test 模式强制开启硬件仿真，读取yaml配置文件中的参数
         elif self.split_mode == 'test':
             self.simulate_jitter = True
-            self.drop_rate = 0.3
-            self.jitter_std = 0.5
-            print(f" [硬件警告] 模式 TEST：开启硬件抖动。丢帧率为：{self.drop_rate}")
+            print(f" [硬件警告] 模式 TEST：开启硬件仿真测试。丢帧率（Drop Rate）：{self.drop_rate}，时钟抖动（Jitter）：{self.jitter_std}")
 
         self.samples = []
         self.mmap_cache = {}
 
-        self._build_index()
+        self._bulid_index()
 
-    def _build_index(self):
-        """解析 JSON 并定向扫描指定目录构建滑窗索引"""
+    def _bulid_index(self):
+        """解析 JSON 文件并定向扫描指定目录构建滑窗索引"""
         # 挂载并解析JSON划分配置文件
         if not os.path.exists(self.split_file):
-            raise FileNotFoundError(f"警告： 找不到数据划分文件")
+            raise FileNotFoundError(f"警告：找不到数据划分文件 {self.split_file}")
 
         with open(self.split_file, 'r', encoding='utf-8') as f:
             split_info = json.load(f)
@@ -62,7 +74,7 @@ class PoseSequenceDataset(Dataset):
 
         allowed_subdirs = split_info['splits'][self.split_mode]
 
-        # 仅在允许的受试者/环境子目录中进行检索
+        # 仅在允许的子目录中进行检索
         for subdir in allowed_subdirs:
             target_data_dir = os.path.join(self.data_dir, subdir)
 
@@ -86,13 +98,13 @@ class PoseSequenceDataset(Dataset):
                         continue
 
                     # 内存映射读取 shape，避免资源爆炸
-                    data_shape = np.load(data_path, mmap_mode = 'r').shape
+                    data_shape = np.load(data_path, mmap_mode='r').shape
                     total_frames = data_shape[0]
 
                     if total_frames < self.seq_len:
                         continue
 
-                    for start_idx in range(0, total_frames-self.seq_len + 1, self.stride):
+                    for start_idx in range(0, total_frames - self.seq_len + 1, self.stride):
                         self.samples.append({
                             'data_path': data_path,
                             'label_path': label_path,
@@ -132,14 +144,15 @@ class PoseSequenceDataset(Dataset):
             # 模拟底层晶振微秒级时钟抖动
             jitter = np.random.normal(0, self.base_dt * self.jitter_std, (self.seq_len, 1))
             dt_array = np.clip(dt_array + jitter, 0, 1)
-            # ⭐ 2. 模拟真实的突发性总线阻塞 (Burst Packet Loss)
+
+            # 模拟真实的突发性总线阻塞 (Burst Packet Loss)
             drop_mask = np.zeros(self.seq_len, dtype=bool)
 
             i = 1  # 保证第 0 帧永远有效，作为初始参考
             while i < self.seq_len:
                 # 掷骰子，判断当前时刻总线是否发生故障
                 if np.random.rand() < self.drop_rate:
-                    # 一旦故障，随机连续卡死 1 到 10 帧 (可根据硬件恶劣程度在参数里配置)
+                    # 一旦故障，随机连续卡死 1 到 10 帧
                     burst_length = np.random.randint(1, 11)
 
                     # 计算故障结束的帧索引，注意不要越界
@@ -152,19 +165,20 @@ class PoseSequenceDataset(Dataset):
                     i = end_idx
                 else:
                     i += 1  # 设备正常，看下一帧
+
             accumulated_dt = 0.0
             # 3. 执行物理层面的“零阶保持 (Zero-Order Hold)”
             for i in range(1, self.seq_len):
                 if drop_mask[i]:
                     # 硬件卡顿期间，内存缓冲区只能吐出上一帧的陈旧残留数据
                     features[i] = features[i - 1]
-                    # 🚀 [LNN 核心修复] 既然数据没更新，告诉 ODE 物理引擎“时间冻结”，停止积分
+                    # 数据没更新，告诉 ODE 物理引擎“时间冻结”，停止积分
                     accumulated_dt += dt_array[i, 0]  # 把这帧原本该走的时间存起来
                     dt_array[i, 0] = 1e-4  # 给一个极小值防止除零异常，实质上暂停 LNN 内部的流体演化
                 else:
                     # 硬件通讯恢复，读到了全新的有效特征
                     if accumulated_dt > 0:
-                        # 🚀 [LNN 核心修复] 将之前积攒的所有黑暗时间，一次性补偿给恢复后的这一帧
+                        # 将之前积攒的所有黑暗时间，一次性补偿给恢复后的这一帧
                         # 让 LNN 的微分方程瞬间完成“跨越式积分”，跟上真实世界的物理进度
                         dt_array[i, 0] += accumulated_dt
                         accumulated_dt = 0.0  # 清空累加器
